@@ -79,21 +79,39 @@ export async function testConnection() {
 export const requestForToken = async () => {
   if (!messaging) return null;
   try {
+    // Request permission first
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') {
+      console.log('Notification permission not granted');
+      return null;
+    }
+
     const currentToken = await getToken(messaging, {
-      vapidKey: 'BJO530hzi2JWHttuCtYUrtwWKKWJGCeDka_xwc9nXTzHaeDHjQh11ADLKtl_o34OEOiNXdxsydAIp6CMqLo_q0w' // Placeholder, user would normally provide this or I'd generate it. For now, I'll focus on the UI and core logic.
+      vapidKey: 'BJO530hzi2JWHttuCtYUrtwWKKWJGCeDka_xwc9nXTzHaeDHjQh11ADLKtl_o34OEOiNXdxsydAIp6CMqLo_q0w'
     });
+    
     if (currentToken) {
-      console.log('current token for client: ', currentToken);
+      console.log('FCM Token generated: ', currentToken);
+      // Store the token for the current user in Firestore
+      if (auth.currentUser) {
+        await setDoc(doc(db, 'fcmTokens', auth.currentUser.uid), {
+          token: currentToken,
+          updatedAt: serverTimestamp(),
+          email: auth.currentUser.email
+        }, { merge: true });
+      }
       return currentToken;
     } else {
-      console.log('No registration token available. Request permission to generate one.');
+      console.log('No registration token available.');
       return null;
     }
   } catch (err) {
-    console.log('An error occurred while retrieving token. ', err);
+    console.log('An error occurred while retrieving token: ', err);
     return null;
   }
 };
+
+import { setDoc, serverTimestamp } from 'firebase/firestore';
 
 export const onMessageListener = () =>
   new Promise((resolve) => {

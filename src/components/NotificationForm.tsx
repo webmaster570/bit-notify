@@ -42,7 +42,7 @@ export function NotificationForm({ onSuccess }: { onSuccess: () => void }) {
     setLoading(true);
 
     try {
-      await addDoc(collection(db, 'notifications'), {
+      const docRef = await addDoc(collection(db, 'notifications'), {
         title,
         body,
         priority,
@@ -61,6 +61,28 @@ export function NotificationForm({ onSuccess }: { onSuccess: () => void }) {
           readCount: 0,
         },
       });
+
+      // Trigger push notification via backend if not scheduled for later
+      if (!scheduledAt) {
+        try {
+          await fetch('/api/broadcast', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              title,
+              body,
+              targetGroup: {
+                department: targetDept,
+                academicYear: targetYear,
+                course: targetCourse,
+              }
+            })
+          });
+        } catch (pushErr) {
+          console.error('Failed to trigger push notification:', pushErr);
+        }
+      }
+
       setTitle('');
       setBody('');
       setScheduledAt('');
