@@ -80,7 +80,7 @@ export const requestForToken = async () => {
   if (!messaging) return null;
   try {
     const currentToken = await getToken(messaging, {
-      vapidKey: 'BD8X8u6D6x1R-N-U0qU9Yv3u0_vX-X_q-x-X-x-X-x-X-x-X' // Placeholder, user would normally provide this or I'd generate it. For now, I'll focus on the UI and core logic.
+      vapidKey: 'BJO530hzi2JWHttuCtYUrtwWKKWJGCeDka_xwc9nXTzHaeDHjQh11ADLKtl_o34OEOiNXdxsydAIp6CMqLo_q0w' // Placeholder, user would normally provide this or I'd generate it. For now, I'll focus on the UI and core logic.
     });
     if (currentToken) {
       console.log('current token for client: ', currentToken);
