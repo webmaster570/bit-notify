@@ -244,7 +244,25 @@ export function NotificationForm({ onSuccess }: { onSuccess: () => void }) {
           </div>
         </div>
 
-        <div className="pt-4 flex items-center justify-end border-t border-slate-100">
+        <div className="pt-4 flex items-center justify-end gap-4 border-t border-slate-100">
+          <button
+            type="button"
+            onClick={async () => {
+              const res = await fetch('/api/broadcast', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                  title: 'Test Notification', 
+                  body: 'If you see this, your push notification setup is working!' 
+                })
+              });
+              const data = await res.json();
+              alert(`Test Status: ${res.ok ? 'Sent' : 'Failed'}\nDevices reached: ${data.sentCount || 0}`);
+            }}
+            className="text-xs font-semibold text-slate-400 hover:text-blue-600 transition-colors"
+          >
+            Send Test Push
+          </button>
           <button
             type="submit"
             disabled={loading}

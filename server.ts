@@ -30,7 +30,7 @@ async function startServer() {
     }
   }
 
-  const db = getFirestore();
+  const db = getFirestore("ai-studio-45fb3207-d536-45da-87f6-8b2651c59b61");
   const messaging = getMessaging();
 
   app.get('/health', (req, res) => {

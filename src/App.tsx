@@ -9,19 +9,33 @@ import { AuthView } from './components/AuthView';
 import { AdminDashboard } from './components/AdminDashboard';
 import { StudentDashboard } from './components/StudentDashboard';
 import { Loader2 } from 'lucide-react';
-import { requestForToken, onMessageListener } from './lib/firebase';
+import { requestForToken, messaging } from './lib/firebase';
+import { onMessage } from 'firebase/messaging';
 
 export default function App() {
   const { user, profile, loading, error } = useAuth();
 
   useEffect(() => {
     if (user) {
-      requestForToken();
-      
-      onMessageListener().then((payload: any) => {
-        console.log('Received foreground message: ', payload);
-        // You could show a toast here if you want
+      requestForToken().then(token => {
+        if (token) {
+          console.log('FCM Token ready:', token);
+        }
       });
+      
+      // Keep listening for foreground messages
+      const unsubscribe = onMessage(messaging!, (payload) => {
+        console.log('Foreground message received:', payload);
+        // Display a basic browser notification if in foreground
+        if (Notification.permission === 'granted') {
+          new Notification(payload.notification?.title || 'EduNotify', {
+            body: payload.notification?.body,
+            icon: 'https://cdn-icons-png.flaticon.com/512/3135/3135823.png'
+          });
+        }
+      });
+
+      return () => unsubscribe();
     }
   }, [user]);
 

@@ -71,6 +71,27 @@ export function Layout({ children, profile, activeTab, setActiveTab }: LayoutPro
             <LogOut className="h-5 w-5" />
             Sign Out
           </button>
+
+          <div className="mt-4 pt-4 border-t border-slate-100">
+            <button
+              onClick={async () => {
+                const res = await fetch('/api/broadcast', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ 
+                    title: 'System Check', 
+                    body: 'Push notifications are correctly configured!' 
+                  })
+                });
+                const data = await res.json();
+                alert(`Status: ${res.ok ? 'Sent' : 'Error'}. Target devices: ${data.sentCount || 0}`);
+              }}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2 text-[10px] uppercase tracking-widest font-bold text-slate-400 hover:text-blue-600 transition-colors"
+            >
+              <Bell className="h-3 w-3" />
+              Test Push Config
+            </button>
+          </div>
         </div>
       </aside>
 
