@@ -1,0 +1,6 @@
+{
+  "name": "EduNotify",
+  "description": "Real-time notification and announcement platform for educational organizations with role-based access and student segmentation.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

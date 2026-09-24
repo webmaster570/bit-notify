@@ -1,0 +1,34 @@
+{
+  "collections": {
+    "users": {
+      "uid": "string",
+      "email": "string",
+      "role": "string",
+      "name": "string",
+      "department": "string",
+      "academicYear": "string",
+      "course": "string",
+      "fcmTokens": "array",
+      "createdAt": "timestamp"
+    },
+    "notifications": {
+      "title": "string",
+      "body": "string",
+      "priority": "string",
+      "category": "string",
+      "targetGroup": {
+        "department": "string",
+        "academicYear": "string",
+        "course": "string"
+      },
+      "scheduledAt": "timestamp",
+      "createdAt": "timestamp",
+      "senderId": "string",
+      "status": "string",
+      "deliveryStats": {
+        "sentCount": "number",
+        "readCount": "number"
+      }
+    }
+  }
+}
