@@ -3,15 +3,27 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from './hooks/useAuth';
 import { AuthView } from './components/AuthView';
 import { AdminDashboard } from './components/AdminDashboard';
 import { StudentDashboard } from './components/StudentDashboard';
 import { Loader2 } from 'lucide-react';
+import { requestForToken, onMessageListener } from './lib/firebase';
 
 export default function App() {
   const { user, profile, loading, error } = useAuth();
+
+  useEffect(() => {
+    if (user) {
+      requestForToken();
+      
+      onMessageListener().then((payload: any) => {
+        console.log('Received foreground message: ', payload);
+        // You could show a toast here if you want
+      });
+    }
+  }, [user]);
 
   if (loading) {
     return (
