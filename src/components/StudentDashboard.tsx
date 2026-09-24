@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { db, requestForToken, onMessageListener } from '../lib/firebase';
-import { collection, query, where, orderBy, doc, updateDoc, arrayUnion } from 'firebase/firestore';
+import React, { useState } from 'react';
+import { db } from '../lib/firebase';
+import { collection, query, orderBy } from 'firebase/firestore';
 import { useCollection } from 'react-firebase-hooks/firestore';
 import { Layout } from './Layout';
 import { NotificationList } from './NotificationList';
 import { UserProfile } from '../hooks/useAuth';
-import { Bell, Shield, Info, Calendar } from 'lucide-react';
+import { Bell, Shield, Calendar } from 'lucide-react';
 
 export function StudentDashboard({ profile }: { profile: UserProfile }) {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -24,31 +24,12 @@ export function StudentDashboard({ profile }: { profile: UserProfile }) {
     if (data.status !== 'sent') return false;
     const target = data.targetGroup;
 
-    const deptMatch = target.department === 'All' || target.department === profile.department;
-    const courseMatch = target.course === 'All' || target.course === profile.course;
-    const yearMatch = target.academicYear === 'All' || target.academicYear === profile.academicYear;
+    const deptMatch = !target.department || target.department === 'All' || target.department === profile.department;
+    const courseMatch = !target.course || target.course === 'All' || target.course === profile.course;
+    const yearMatch = !target.academicYear || target.academicYear === 'All' || target.academicYear === profile.academicYear;
 
     return deptMatch && courseMatch && yearMatch;
   }) || [];
-
-  useEffect(() => {
-    // Request push notification token
-    const setupNotifications = async () => {
-      const token = await requestForToken();
-      if (token) {
-        await updateDoc(doc(db, 'users', profile.uid), {
-          fcmTokens: arrayUnion(token)
-        });
-      }
-    };
-
-    setupNotifications();
-
-    onMessageListener().then(payload => {
-      console.log('Notification received: ', payload);
-      // You could show a toast here
-    });
-  }, [profile.uid]);
 
   const renderContent = () => {
     switch (activeTab) {

@@ -17,25 +17,30 @@ export default function App() {
 
   useEffect(() => {
     if (user) {
+      console.log('User detected, initializing notifications for:', user.email);
       requestForToken().then(token => {
         if (token) {
-          console.log('FCM Token ready:', token);
+          console.log('Notification registration successful for:', user.email);
+        } else {
+          console.warn('Notification registration failed or was denied for:', user.email);
         }
+      }).catch(err => {
+        console.error('Critical error in notification setup for:', user.email, err);
       });
       
       // Keep listening for foreground messages
-      const unsubscribe = onMessage(messaging!, (payload) => {
-        console.log('Foreground message received:', payload);
-        // Display a basic browser notification if in foreground
-        if (Notification.permission === 'granted') {
-          new Notification(payload.notification?.title || 'EduNotify', {
-            body: payload.notification?.body,
-            icon: 'https://cdn-icons-png.flaticon.com/512/3135/3135823.png'
-          });
-        }
-      });
-
-      return () => unsubscribe();
+      if (messaging) {
+        const unsubscribe = onMessage(messaging, (payload) => {
+          console.log('Foreground message received for:', user.email, payload);
+          if (Notification.permission === 'granted') {
+            new Notification(payload.notification?.title || 'EduNotify', {
+              body: payload.notification?.body,
+              icon: 'https://cdn-icons-png.flaticon.com/512/3135/3135823.png'
+            });
+          }
+        });
+        return () => unsubscribe();
+      }
     }
   }, [user]);
 
