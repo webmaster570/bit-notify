@@ -91,7 +91,7 @@ export const requestForToken = async () => {
     }
 
     const currentToken = await getToken(messaging, {
-      vapidKey: 'BJO530hzi2JWHttuCtYUrtwWKKWJGCeDka_xwc9nXTzHaeDHjQh11ADLKtl_o34OEOiNXdxsydAIp6CMqLo_q0w'
+      vapidKey: import.meta.env.VITE_VAPID_KEY || 'BJO530hzi2JWHttuCtYUrtwWKKWJGCeDka_xwc9nXTzHaeDHjQh11ADLKtl_o34OEOiNXdxsydAIp6CMqLo_q0w'
     });
     
     if (currentToken) {
@@ -99,16 +99,23 @@ export const requestForToken = async () => {
       
       // Store the token for the current user in Firestore
       if (auth.currentUser) {
+        // Fetch user profile to store alongside token for targeted broadcasting
+        const userDoc = await getDocFromServer(doc(db, 'users', auth.currentUser.uid));
+        const userData = userDoc.exists() ? userDoc.data() : {};
+
         const tokenRef = doc(db, 'fcmTokens', auth.currentUser.uid);
         await setDoc(tokenRef, {
           token: currentToken,
           updatedAt: serverTimestamp(),
           email: auth.currentUser.email,
-          uid: auth.currentUser.uid
+          uid: auth.currentUser.uid,
+          department: userData.department || 'All',
+          course: userData.course || 'All',
+          academicYear: userData.academicYear || 'All'
         }, { merge: true });
-        console.log('FCM Token saved to Firestore for user:', auth.currentUser.uid);
+        console.log('FCM Token saved to Firestore with profile info');
       } else {
-        console.warn('FCM Token generated but no user is logged in to save it to');
+        console.warn('FCM Token generated but no user is logged in');
       }
       return currentToken;
     } else {

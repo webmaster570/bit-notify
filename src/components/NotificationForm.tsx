@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { db } from '../lib/firebase';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { Send, Clock, Target, AlertCircle, Paperclip, Upload, FileText, X } from 'lucide-react';
+import { collection, addDoc, serverTimestamp, doc, updateDoc, getDoc } from 'firebase/firestore';
+import { Send, Clock, Target, AlertCircle, Paperclip, Upload, FileText, X, FileEdit } from 'lucide-react';
 import { cn } from '../lib/utils';
 
-export function NotificationForm({ onSuccess }: { onSuccess: () => void }) {
+export function NotificationForm({ onSuccess, editingId }: { onSuccess: () => void, editingId?: string | null }) {
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [priority, setPriority] = useState<'low' | 'medium' | 'high'>('medium');
@@ -15,6 +15,31 @@ export function NotificationForm({ onSuccess }: { onSuccess: () => void }) {
   const [scheduledAt, setScheduledAt] = useState('');
   const [attachment, setAttachment] = useState<{ name: string, data: string, type: string } | null>(null);
   const [loading, setLoading] = useState(false);
+  const [isDrafting, setIsDrafting] = useState(false);
+
+  useEffect(() => {
+    if (editingId) {
+      const fetchDraft = async () => {
+        const docSnap = await getDoc(doc(db, 'notifications', editingId));
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          setTitle(data.title || '');
+          setBody(data.body || '');
+          setPriority(data.priority || 'medium');
+          setCategory(data.category || 'update');
+          setTargetDept(data.targetGroup?.department || 'All');
+          setTargetYear(data.targetGroup?.academicYear || 'All');
+          setTargetCourse(data.targetGroup?.course || 'All');
+          setAttachment(data.attachment || null);
+          if (data.scheduledAt) {
+            const date = data.scheduledAt.toDate();
+            setScheduledAt(date.toISOString().slice(0, 16));
+          }
+        }
+      };
+      fetchDraft();
+    }
+  }, [editingId]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -37,12 +62,12 @@ export function NotificationForm({ onSuccess }: { onSuccess: () => void }) {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSave = async (status: 'sent' | 'scheduled' | 'draft') => {
     setLoading(true);
+    setIsDrafting(status === 'draft');
 
     try {
-      const docRef = await addDoc(collection(db, 'notifications'), {
+      const payload = {
         title,
         body,
         priority,
@@ -54,16 +79,25 @@ export function NotificationForm({ onSuccess }: { onSuccess: () => void }) {
           course: targetCourse,
         },
         scheduledAt: scheduledAt ? new Date(scheduledAt) : null,
-        createdAt: serverTimestamp(),
-        status: scheduledAt ? 'scheduled' : 'sent',
+        updatedAt: serverTimestamp(),
+        status: status === 'draft' ? 'draft' : (scheduledAt ? 'scheduled' : 'sent'),
         deliveryStats: {
           sentCount: 0,
           readCount: 0,
         },
-      });
+      };
 
-      // Trigger push notification via backend if not scheduled for later
-      if (!scheduledAt) {
+      if (editingId) {
+        await updateDoc(doc(db, 'notifications', editingId), payload);
+      } else {
+        await addDoc(collection(db, 'notifications'), {
+          ...payload,
+          createdAt: serverTimestamp(),
+        });
+      }
+
+      // Trigger push notification via backend if status is 'sent'
+      if (status === 'sent') {
         try {
           await fetch('/api/broadcast', {
             method: 'POST',
@@ -86,20 +120,31 @@ export function NotificationForm({ onSuccess }: { onSuccess: () => void }) {
       setTitle('');
       setBody('');
       setScheduledAt('');
+      setAttachment(null);
       onSuccess();
     } catch (err) {
-      console.error('Error adding notification:', err);
+      console.error('Error saving notification:', err);
     } finally {
       setLoading(false);
+      setIsDrafting(false);
     }
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    handleSave(scheduledAt ? 'scheduled' : 'sent');
   };
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
       <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
         <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
-          <Send className="h-5 w-5 text-blue-600" />
-          Create Broadcast
+          {editingId ? (
+            <FileEdit className="h-5 w-5 text-blue-600" />
+          ) : (
+            <Send className="h-5 w-5 text-blue-600" />
+          )}
+          {editingId ? 'Edit Draft' : 'Create Broadcast'}
         </h3>
       </div>
 
@@ -244,7 +289,7 @@ export function NotificationForm({ onSuccess }: { onSuccess: () => void }) {
           </div>
         </div>
 
-        <div className="pt-4 flex items-center justify-end gap-4 border-t border-slate-100">
+        <div className="pt-4 flex flex-wrap items-center justify-end gap-3 border-t border-slate-100">
           <button
             type="button"
             onClick={async () => {
@@ -253,22 +298,36 @@ export function NotificationForm({ onSuccess }: { onSuccess: () => void }) {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 
                   title: 'Test Notification', 
-                  body: 'If you see this, your push notification setup is working!' 
+                  body: `Sent at ${new Date().toLocaleTimeString()}. If you see this, your push notification setup is working!` 
                 })
               });
               const data = await res.json();
-              alert(`Test Status: ${res.ok ? 'Sent' : 'Failed'}\nDevices reached: ${data.sentCount || 0}`);
+              if (res.ok) {
+                alert(`Test Success!\nDevices reached: ${data.sentCount || 0}\nFailures: ${data.failureCount || 0}`);
+              } else {
+                alert(`Test Failed: ${data.error || 'Unknown error'}`);
+              }
             }}
-            className="text-xs font-semibold text-slate-400 hover:text-blue-600 transition-colors"
+            className="text-xs font-semibold text-slate-400 hover:text-blue-600 transition-colors mr-auto"
           >
             Send Test Push
           </button>
+
+          <button
+            type="button"
+            disabled={loading}
+            onClick={() => handleSave('draft')}
+            className="px-6 py-2.5 bg-slate-100 text-slate-700 font-semibold rounded-xl hover:bg-slate-200 transition-all disabled:opacity-50"
+          >
+            {loading && isDrafting ? 'Saving...' : 'Save as Draft'}
+          </button>
+
           <button
             type="submit"
             disabled={loading}
             className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 transition-all shadow-sm shadow-blue-200 disabled:opacity-50"
           >
-            {loading ? 'Sending...' : 'Broadcast Now'}
+            {loading && !isDrafting ? 'Processing...' : (scheduledAt ? 'Schedule' : 'Broadcast Now')}
             <Send className="h-4 w-4" />
           </button>
         </div>

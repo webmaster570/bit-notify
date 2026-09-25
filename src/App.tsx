@@ -18,24 +18,50 @@ export default function App() {
   useEffect(() => {
     if (user) {
       console.log('User detected, initializing notifications for:', user.email);
-      requestForToken().then(token => {
-        if (token) {
-          console.log('Notification registration successful for:', user.email);
-        } else {
-          console.warn('Notification registration failed or was denied for:', user.email);
-        }
-      }).catch(err => {
-        console.error('Critical error in notification setup for:', user.email, err);
-      });
+      
+      // Explicitly register service worker for broader compatibility
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/firebase-messaging-sw.js')
+          .then((registration) => {
+            console.log('Service Worker registered with scope:', registration.scope);
+            
+            // Now request token
+            return requestForToken();
+          })
+          .then(token => {
+            if (token) {
+              console.log('Notification registration successful for:', user.email);
+            } else {
+              console.warn('Notification registration failed or was denied for:', user.email);
+            }
+          })
+          .catch(err => {
+            console.error('Critical error in service worker/notification setup:', err);
+          });
+      }
       
       // Keep listening for foreground messages
       if (messaging) {
         const unsubscribe = onMessage(messaging, (payload) => {
-          console.log('Foreground message received for:', user.email, payload);
+          console.log('Foreground message received:', payload);
+          
+          // Show browser notification if permitted
           if (Notification.permission === 'granted') {
-            new Notification(payload.notification?.title || 'EduNotify', {
+            const title = payload.notification?.title || 'EduNotify';
+            const options = {
               body: payload.notification?.body,
-              icon: 'https://cdn-icons-png.flaticon.com/512/3135/3135823.png'
+              icon: 'https://cdn-icons-png.flaticon.com/512/3135/3135823.png',
+              badge: 'https://cdn-icons-png.flaticon.com/512/3135/3135823.png',
+              tag: 'broadcast-notification' // Prevent multiple notifications for same thing
+            };
+            
+            // Try using the service worker registration to show the notification
+            // as it is more reliable than new Notification()
+            navigator.serviceWorker.ready.then(registration => {
+              registration.showNotification(title, options);
+            }).catch(() => {
+              // Fallback
+              new Notification(title, options);
             });
           }
         });

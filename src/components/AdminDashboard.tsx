@@ -9,13 +9,91 @@ import { UserProfile } from '../hooks/useAuth';
 import { Users, Bell, TrendingUp, CheckCircle2, Send } from 'lucide-react';
 
 import { UserManagement } from './UserManagement';
+import { requestForToken } from '../lib/firebase';
+
+function NotificationStatusChecker() {
+  const [status, setStatus] = useState<'idle' | 'checking' | 'active' | 'denied' | 'error'>('idle');
+  const [token, setToken] = useState<string | null>(null);
+
+  const checkStatus = async () => {
+    setStatus('checking');
+    try {
+      const permission = await Notification.permission;
+      if (permission === 'denied') {
+        setStatus('denied');
+        return;
+      }
+      const t = await requestForToken();
+      if (t) {
+        setToken(t);
+        setStatus('active');
+      } else {
+        setStatus('error');
+      }
+    } catch (err) {
+      console.error(err);
+      setStatus('error');
+    }
+  };
+
+  return (
+    <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="font-bold text-slate-900">Push Status</h3>
+        <span className={cn(
+          "px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border",
+          status === 'active' ? "bg-emerald-50 text-emerald-700 border-emerald-100" :
+          status === 'denied' ? "bg-red-50 text-red-700 border-red-100" :
+          "bg-slate-50 text-slate-500 border-slate-200"
+        )}>
+          {status === 'active' ? 'Registered' : status === 'denied' ? 'Permission Denied' : 'Inactive'}
+        </span>
+      </div>
+      
+      {status === 'active' ? (
+        <div className="space-y-2">
+          <p className="text-xs text-slate-500">Your browser is ready to receive notifications.</p>
+          <div className="bg-slate-50 p-2 rounded-lg border border-slate-100 overflow-hidden">
+            <p className="text-[8px] font-mono text-slate-400 break-all">{token}</p>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <p className="text-xs text-slate-500">
+            {status === 'denied' 
+              ? 'You have blocked notifications. Please reset permissions in your browser settings.' 
+              : 'Register this device to receive test broadcasts.'}
+          </p>
+          <button
+            onClick={checkStatus}
+            disabled={status === 'checking'}
+            className="w-full py-2 bg-blue-50 text-blue-700 text-xs font-bold rounded-xl border border-blue-100 hover:bg-blue-100 transition-all"
+          >
+            {status === 'checking' ? 'Checking...' : 'Check/Register Device'}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function AdminDashboard({ profile }: { profile: UserProfile }) {
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [editingNotificationId, setEditingNotificationId] = useState<string | null>(null);
   const [notifsQuery] = useState(query(collection(db, 'notifications'), orderBy('createdAt', 'desc'), limit(50)));
   const [notifications, loadingNotifs] = useCollection(notifsQuery);
   const [usersQuery] = useState(query(collection(db, 'users'), limit(100)));
   const [users, loadingUsers] = useCollection(usersQuery);
+
+  const handleEditDraft = (id: string) => {
+    setEditingNotificationId(id);
+    setActiveTab('broadcast');
+  };
+
+  const handleBroadcastSuccess = () => {
+    setEditingNotificationId(null);
+    setActiveTab('notifications');
+  };
 
   const stats = [
     { label: 'Total Students', value: users?.size || 0, icon: Users, color: 'text-blue-600', bg: 'bg-blue-50' },
@@ -87,6 +165,8 @@ export function AdminDashboard({ profile }: { profile: UserProfile }) {
                     Manage All Users
                   </button>
                 </div>
+                
+                <NotificationStatusChecker />
               </div>
             </div>
           </div>
@@ -95,10 +175,31 @@ export function AdminDashboard({ profile }: { profile: UserProfile }) {
         return (
           <div className="max-w-4xl mx-auto space-y-6">
             <div className="flex flex-col gap-1">
-              <h2 className="text-2xl font-bold text-slate-900">Broadcast Announcement</h2>
-              <p className="text-slate-500 text-sm">Send real-time notifications to specific segments of your campus.</p>
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-2xl font-bold text-slate-900">
+                    {editingNotificationId ? 'Continue Composing' : 'Broadcast Announcement'}
+                  </h2>
+                  <p className="text-slate-500 text-sm">
+                    {editingNotificationId 
+                      ? 'Finish your draft and send it to your audience.' 
+                      : 'Send real-time notifications to specific segments of your campus.'}
+                  </p>
+                </div>
+                {editingNotificationId && (
+                  <button 
+                    onClick={() => setEditingNotificationId(null)}
+                    className="px-4 py-2 text-slate-500 hover:text-slate-700 font-medium text-sm"
+                  >
+                    Cancel Edit
+                  </button>
+                )}
+              </div>
             </div>
-            <NotificationForm onSuccess={() => setActiveTab('notifications')} />
+            <NotificationForm 
+              onSuccess={handleBroadcastSuccess} 
+              editingId={editingNotificationId} 
+            />
           </div>
         );
       case 'notifications':
@@ -113,7 +214,12 @@ export function AdminDashboard({ profile }: { profile: UserProfile }) {
                 New Broadcast
               </button>
             </div>
-            <NotificationList notifications={notifications?.docs || []} loading={loadingNotifs} isAdmin />
+            <NotificationList 
+              notifications={notifications?.docs || []} 
+              loading={loadingNotifs} 
+              isAdmin 
+              onEdit={handleEditDraft}
+            />
           </div>
         );
       case 'users':
