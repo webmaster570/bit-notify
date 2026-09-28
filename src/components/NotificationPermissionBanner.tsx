@@ -72,7 +72,19 @@ export function NotificationPermissionBanner({ compact = false }: { compact?: bo
           body: `Verification test received at ${new Date().toLocaleTimeString()}! Push notification is operational.`,
         }),
       });
-      const data = await res.json();
+
+      const contentType = res.headers.get('content-type');
+      let data: any = {};
+      if (contentType && contentType.includes('application/json')) {
+        data = await res.json();
+      } else {
+        const text = await res.text();
+        if (res.status === 404) {
+          throw new Error('API route /api/broadcast is not active on this deployment (404). Please ensure the latest commit with api/broadcast.ts and vercel.json is deployed.');
+        }
+        throw new Error(text.slice(0, 120) || `HTTP error ${res.status}`);
+      }
+
       if (res.ok) {
         setTestStatus(`Delivered to ${data.sentCount || 0} device(s)`);
       } else {

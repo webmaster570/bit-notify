@@ -293,19 +293,37 @@ export function NotificationForm({ onSuccess, editingId }: { onSuccess: () => vo
           <button
             type="button"
             onClick={async () => {
-              const res = await fetch('/api/broadcast', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                  title: 'Test Notification', 
-                  body: `Sent at ${new Date().toLocaleTimeString()}. If you see this, your push notification setup is working!` 
-                })
-              });
-              const data = await res.json();
-              if (res.ok) {
-                alert(`Test Success!\nDevices reached: ${data.sentCount || 0}\nFailures: ${data.failureCount || 0}`);
-              } else {
-                alert(`Test Failed: ${data.error || 'Unknown error'}`);
+              try {
+                const res = await fetch('/api/broadcast', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ 
+                    title: 'Test Notification', 
+                    body: `Sent at ${new Date().toLocaleTimeString()}. If you see this, your push notification setup is working!` 
+                  })
+                });
+
+                const contentType = res.headers.get('content-type');
+                let data: any = {};
+                if (contentType && contentType.includes('application/json')) {
+                  data = await res.json();
+                } else {
+                  const text = await res.text();
+                  if (res.status === 404) {
+                    alert('Endpoint /api/broadcast is not active on this deployment (404). Please ensure the latest commit with api/broadcast.ts and vercel.json is deployed.');
+                    return;
+                  }
+                  alert(`Server returned non-JSON response (${res.status}):\n${text.slice(0, 150)}`);
+                  return;
+                }
+
+                if (res.ok) {
+                  alert(`Test Success!\nDevices reached: ${data.sentCount || 0}\nFailures: ${data.failureCount || 0}`);
+                } else {
+                  alert(`Test Failed: ${data.error || data.details || 'Unknown error'}`);
+                }
+              } catch (err: any) {
+                alert(`Network/Client Error:\n${err.message}`);
               }
             }}
             className="text-xs font-semibold text-slate-400 hover:text-blue-600 transition-colors mr-auto"
