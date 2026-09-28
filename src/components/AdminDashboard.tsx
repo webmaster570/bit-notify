@@ -23,7 +23,11 @@ function NotificationStatusChecker() {
         setStatus('denied');
         return;
       }
-      const t = await requestForToken();
+      
+      const registration = await navigator.serviceWorker.getRegistration('/firebase-messaging-sw.js') 
+        || await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+        
+      const t = await requestForToken(registration);
       if (t) {
         setToken(t);
         setStatus('active');
@@ -61,8 +65,8 @@ function NotificationStatusChecker() {
         <div className="space-y-3">
           <p className="text-xs text-slate-500">
             {status === 'denied' 
-              ? 'You have blocked notifications. Please reset permissions in your browser settings.' 
-              : 'Register this device to receive test broadcasts.'}
+              ? 'You have blocked notifications. Please reset permissions in your browser settings (click the lock icon in the URL bar).' 
+              : 'Register this device to receive test broadcasts. Make sure you are using Chrome, Edge, or Firefox.'}
           </p>
           <button
             onClick={checkStatus}
@@ -71,6 +75,11 @@ function NotificationStatusChecker() {
           >
             {status === 'checking' ? 'Checking...' : 'Check/Register Device'}
           </button>
+          {status === 'error' && (
+            <p className="text-[10px] text-red-500 bg-red-50 p-2 rounded-lg border border-red-100">
+              Registration failed. Try clearing site data and refreshing.
+            </p>
+          )}
         </div>
       )}
     </div>

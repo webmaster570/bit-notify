@@ -76,7 +76,7 @@ export async function testConnection() {
   }
 }
 
-export const requestForToken = async () => {
+export const requestForToken = async (registration?: ServiceWorkerRegistration) => {
   if (!messaging) {
     console.log('Messaging not supported/initialized');
     return null;
@@ -84,14 +84,18 @@ export const requestForToken = async () => {
   
   try {
     // Request permission first
-    const permission = await Notification.requestPermission();
+    const permission = Notification.permission === 'default' 
+      ? await Notification.requestPermission() 
+      : Notification.permission;
+      
     if (permission !== 'granted') {
       console.log('Notification permission not granted:', permission);
       return null;
     }
 
     const currentToken = await getToken(messaging, {
-      vapidKey: import.meta.env.VITE_VAPID_KEY || 'BJO530hzi2JWHttuCtYUrtwWKKWJGCeDka_xwc9nXTzHaeDHjQh11ADLKtl_o34OEOiNXdxsydAIp6CMqLo_q0w'
+      vapidKey: import.meta.env.VITE_VAPID_KEY || 'BJO530hzi2JWHttuCtYUrtwWKKWJGCeDka_xwc9nXTzHaeDHjQh11ADLKtl_o34OEOiNXdxsydAIp6CMqLo_q0w',
+      serviceWorkerRegistration: registration
     });
     
     if (currentToken) {

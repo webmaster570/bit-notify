@@ -26,7 +26,7 @@ export default function App() {
             console.log('Service Worker registered with scope:', registration.scope);
             
             // Now request token
-            return requestForToken();
+            return requestForToken(registration);
           })
           .then(token => {
             if (token) {
