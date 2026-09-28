@@ -18,9 +18,13 @@ import {
   Eye, 
   Megaphone,
   Trash2,
-  RefreshCw
+  RefreshCw,
+  Wrench,
+  Database
 } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { collection, getDocs, writeBatch, doc } from 'firebase/firestore';
+import { db } from '../lib/firebase';
 
 export function BrandingSettings() {
   const { branding, theme, updateBranding, resetBranding, saving } = useBranding();
@@ -35,7 +39,34 @@ export function BrandingSettings() {
   const [bannerAlert, setBannerAlert] = useState(branding.bannerAlert);
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [clearingCache, setClearingCache] = useState(false);
+  const [cleaningDb, setCleaningDb] = useState(false);
   const [cacheClearMessage, setCacheClearMessage] = useState<string | null>(null);
+
+  const handleCleanupTokens = async () => {
+    if (!confirm('This will purge all registered device tokens from the database. Users will need to re-enable notifications on their next login to receive alerts. Continue?')) {
+      return;
+    }
+    
+    setCleaningDb(true);
+    try {
+      const snapshot = await getDocs(collection(db, 'fcmTokens'));
+      const batch = writeBatch(db);
+      snapshot.docs.forEach((docSnap) => {
+        batch.delete(docSnap.ref);
+      });
+      
+      if (snapshot.size > 0) {
+        await batch.commit();
+      }
+      
+      setCacheClearMessage(`Successfully cleaned ${snapshot.size} legacy tokens. Fresh device data will be collected as users log in.`);
+      setTimeout(() => setCacheClearMessage(null), 6000);
+    } catch (err: any) {
+      alert('Cleanup failed: ' + err.message);
+    } finally {
+      setCleaningDb(false);
+    }
+  };
 
   const handleClearCache = async () => {
     setClearingCache(true);
@@ -508,6 +539,36 @@ export function BrandingSettings() {
             <p className="text-[11px] text-slate-400">
               Displays a thin announcement banner at the very top of all student, faculty, and administrator screens.
             </p>
+          </div>
+
+          {/* Card 5: System Maintenance */}
+          <div className="bg-white rounded-2xl border border-red-200/80 p-6 shadow-xs space-y-4">
+            <div className="flex items-center gap-2 pb-3 border-b border-red-100">
+              <Wrench className="h-4 w-4 text-red-600" />
+              <h3 className="text-sm font-bold text-red-900 uppercase tracking-wider">System Maintenance</h3>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="space-y-1">
+                <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                  <Database className="h-4 w-4 text-slate-400" />
+                  Purge Duplicate Device Tokens
+                </h4>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  Cleanup legacy FCM tokens that were incorrectly saved under multiple user IDs per device. 
+                  This fixes the issue of receiving duplicate notifications on shared computers.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleCleanupTokens}
+                disabled={cleaningDb}
+                className="shrink-0 px-4 py-2.5 bg-red-50 text-red-700 border border-red-200 rounded-xl text-xs font-bold hover:bg-red-100 transition-all flex items-center gap-2"
+              >
+                {cleaningDb ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                <span>{cleaningDb ? 'Cleaning Database...' : 'Purge All Tokens'}</span>
+              </button>
+            </div>
           </div>
         </form>
 

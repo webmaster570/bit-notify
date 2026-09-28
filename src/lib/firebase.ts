@@ -169,15 +169,17 @@ export const requestForToken = async (registration?: ServiceWorkerRegistration) 
           academicYear: userData.academicYear || 'All'
         };
 
-        // 1. Save specific per-device token so desktop and mobile devices DO NOT overwrite each other
-        const deviceTokenRef = doc(db, 'fcmTokens', `${auth.currentUser.uid}_${deviceId}`);
-        await setDoc(deviceTokenRef, tokenPayload, { merge: true });
+        // To prevent "zombie" notifications when multiple users share a device:
+        // 1. Store the token using a stable document ID: deviceId (NOT user_deviceId)
+        // This ensures one device = one record in the database.
+        const tokenRef = doc(db, 'fcmTokens', deviceId);
+        await setDoc(tokenRef, tokenPayload, { merge: true });
 
-        // 2. Also keep primary user token doc updated for compatibility
+        // 3. For compatibility with legacy targeting, also update the UID doc
         const userTokenRef = doc(db, 'fcmTokens', auth.currentUser.uid);
         await setDoc(userTokenRef, tokenPayload, { merge: true });
 
-        console.log(`FCM Token saved to Firestore for device ${deviceId} (${deviceType})`);
+        console.log(`FCM Token updated for device ${deviceId} (${deviceType})`);
       } else {
         console.warn('FCM Token generated but no user is logged in');
       }

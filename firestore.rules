@@ -40,7 +40,7 @@ service cloud.firestore {
     match /fcmTokens/{tokenId} {
       allow read: if isAdmin() || isPushAdmin() || (request.auth != null && (request.auth.uid == tokenId || resource.data.uid == request.auth.uid));
       allow write: if request.auth != null && (request.auth.uid == tokenId || request.resource.data.uid == request.auth.uid);
-      allow delete: if request.auth != null && (request.auth.uid == tokenId || resource.data.uid == request.auth.uid);
+      allow delete: if isAdmin() || (request.auth != null && (request.auth.uid == tokenId || resource.data.uid == request.auth.uid));
     }
 
     match /settings/{settingId} {
