@@ -75,9 +75,9 @@ export default async function handler(req: any, res: any) {
   try {
     const { primaryDbId, messaging } = getFirebaseAdmin();
     const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
-    const { title, body: messageBody, targetGroup, testToken, token } = body;
+    const { title, body: messageBody, targetGroup, testToken, token, icon, badge, image } = body;
 
-    console.log('[api/broadcast] Request received:', { title, targetGroup, hasTestToken: !!(testToken || token) });
+    console.log('[api/broadcast] Request received:', { title, targetGroup, hasTestToken: !!(testToken || token), hasCustomIcon: !!icon });
 
     if (!title) {
       return res.status(400).json({ error: 'Title is required' });
@@ -145,6 +145,43 @@ export default async function handler(req: any, res: any) {
 
     const broadcastTag = 'campus-broadcast-' + Date.now();
 
+    // Resolve origin for fully qualified icon URLs
+    const origin = req.headers.origin 
+      || (req.headers.referer ? new URL(req.headers.referer).origin : '') 
+      || (req.headers.host ? `https://${req.headers.host}` : '');
+
+    // Resolve notification icon: prioritize uploaded/sent icon, else active portal branding, else default BIT Mesra logo
+    let resolvedIcon = icon;
+    if (!resolvedIcon || resolvedIcon.includes('flaticon') || resolvedIcon.includes('3135823')) {
+      try {
+        const db = getFirestore(primaryDbId);
+        const brandingDoc = await db.collection('settings').doc('branding').get();
+        if (brandingDoc.exists) {
+          const bData = brandingDoc.data();
+          if (bData && bData.logoUrl && !bData.logoUrl.includes('flaticon') && !bData.logoUrl.includes('3135823')) {
+            resolvedIcon = bData.logoUrl;
+          }
+        }
+      } catch (bErr) {
+        console.warn('[api/broadcast] Could not read branding doc for push icon:', bErr);
+      }
+    }
+
+    // High availability BIT Mesra official emblem fallback
+    const bitMesraOfficialUrl = 'https://bitmesra.ac.in/sitelogo/bit-newlogo.png';
+    const defaultLocalLogo = origin ? `${origin}/bit-mesra-logo.png?v=3` : bitMesraOfficialUrl;
+
+    if (!resolvedIcon || resolvedIcon.includes('flaticon') || resolvedIcon.includes('3135823')) {
+      resolvedIcon = defaultLocalLogo;
+    } else if (resolvedIcon.startsWith('data:')) {
+      // Large base64 data URLs exceed FCM 4KB payload limit. Use server logo endpoint or fallback
+      resolvedIcon = origin ? `${origin}/api/branding/logo` : bitMesraOfficialUrl;
+    } else if (resolvedIcon.startsWith('/')) {
+      resolvedIcon = origin ? `${origin}${resolvedIcon}` : bitMesraOfficialUrl;
+    }
+
+    const resolvedBadge = origin ? `${origin}/bit-mesra-logo.png?v=3` : bitMesraOfficialUrl;
+
     const message: any = {
       notification: {
         title: title,
@@ -154,6 +191,8 @@ export default async function handler(req: any, res: any) {
       data: {
         title: title,
         body: messageBody || '',
+        icon: resolvedIcon,
+        badge: resolvedBadge,
         url: '/',
         click_action: '/',
         tag: broadcastTag,
@@ -169,8 +208,9 @@ export default async function handler(req: any, res: any) {
         notification: {
           title: title,
           body: messageBody || '',
-          icon: 'https://cdn-icons-png.flaticon.com/512/3135/3135823.png',
-          badge: 'https://cdn-icons-png.flaticon.com/512/3135/3135823.png',
+          icon: resolvedIcon,
+          badge: resolvedBadge,
+          image: image || undefined,
           vibrate: [200, 100, 200, 100, 200], // Mobile vibration pattern
           requireInteraction: true,
           tag: broadcastTag,
@@ -178,6 +218,7 @@ export default async function handler(req: any, res: any) {
           silent: false,
           data: {
             url: '/',
+            icon: resolvedIcon,
           },
         },
         fcmOptions: {
@@ -192,12 +233,15 @@ export default async function handler(req: any, res: any) {
           defaultSound: true,
           defaultVibrateTimings: true,
           channelId: 'campus_alerts',
+          color: '#991b1b', // BIT Crimson
           tag: broadcastTag,
+          icon: resolvedIcon,
         },
       },
       tokens: tokens,
     };
 
+    console.log('[api/broadcast] Sending multicast with icon:', resolvedIcon);
     const response = await messaging.sendEachForMulticast(message);
     console.log('[api/broadcast] FCM response - Success:', response.successCount, 'Failures:', response.failureCount);
 

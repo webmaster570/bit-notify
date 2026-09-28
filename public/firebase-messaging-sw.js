@@ -1,16 +1,39 @@
 importScripts('https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.7.0/firebase-messaging-compat.js');
 
-// Fast service worker lifecycle activation (vital for mobile browsers) & pre-caching branding assets
+const CACHE_NAME = 'edunotify-branding-v3';
+
+// Helper to sanitize and resolve logo URL: always reject flaticon or legacy placeholders,
+// and guarantee the BIT Mesra emblem is used.
+function sanitizeNotificationIcon(candidate) {
+  const fallback = self.location.origin + '/bit-mesra-logo.png?v=3';
+  if (!candidate || typeof candidate !== 'string') {
+    return fallback;
+  }
+  // Strip any old flaticon or cached graduation cap
+  if (candidate.includes('flaticon.com') || candidate.includes('3135823')) {
+    return fallback;
+  }
+  if (candidate.startsWith('http://') || candidate.startsWith('https://') || candidate.startsWith('data:')) {
+    return candidate;
+  }
+  try {
+    return new URL(candidate, self.location.origin).href;
+  } catch {
+    return fallback;
+  }
+}
+
+// Service worker lifecycle activation & pre-caching branding assets
 self.addEventListener('install', (event) => {
   self.skipWaiting();
   event.waitUntil(
-    caches.open('edunotify-branding-v1').then((cache) => {
+    caches.open(CACHE_NAME).then((cache) => {
       return cache.addAll([
-        '/bit-mesra-logo.png',
-        '/logo.png',
-        '/favicon.png',
-        '/bit-mesra-banner.png'
+        '/bit-mesra-logo.png?v=3',
+        '/logo.png?v=3',
+        '/favicon.png?v=3',
+        '/bit-mesra-banner.png?v=3'
       ]);
     }).catch((err) => {
       console.warn('Asset pre-caching skipped:', err);
@@ -18,8 +41,33 @@ self.addEventListener('install', (event) => {
   );
 });
 
+// Purge any and all obsolete caches on activation
 self.addEventListener('activate', (event) => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(
+    caches.keys().then((cacheNames) => {
+      return Promise.all(
+        cacheNames.map((cacheName) => {
+          if (cacheName !== CACHE_NAME) {
+            console.log('[SW] Purging obsolete cache:', cacheName);
+            return caches.delete(cacheName);
+          }
+        })
+      );
+    }).then(() => self.clients.claim())
+  );
+});
+
+// Listen for client message to manually force-clear all caches
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.action === 'CLEAR_CACHE') {
+    caches.keys().then((names) => {
+      return Promise.all(names.map((name) => caches.delete(name)));
+    }).then(() => {
+      if (event.ports && event.ports[0]) {
+        event.ports[0].postMessage({ success: true });
+      }
+    });
+  }
 });
 
 firebase.initializeApp({
@@ -38,9 +86,11 @@ messaging.onBackgroundMessage((payload) => {
   console.log('[firebase-messaging-sw.js] Received background message:', payload);
   const notificationTitle = payload?.notification?.title || payload?.data?.title || 'BIT Mesra Campus Alert';
   
-  // Display the uploaded or official BIT Mesra emblem icon
-  const notificationIcon = payload?.notification?.icon || payload?.data?.icon || '/bit-mesra-logo.png';
-  const notificationBadge = payload?.notification?.badge || payload?.data?.badge || '/bit-mesra-logo.png';
+  // Guarantee official BIT Mesra emblem or active uploaded logo (reject any flaticon)
+  const rawIcon = payload?.notification?.icon || payload?.data?.icon;
+  const rawBadge = payload?.notification?.badge || payload?.data?.badge;
+  const notificationIcon = sanitizeNotificationIcon(rawIcon);
+  const notificationBadge = sanitizeNotificationIcon(rawBadge);
 
   const notificationOptions = {
     body: payload?.notification?.body || payload?.data?.body || 'New announcement available.',
@@ -70,8 +120,8 @@ self.addEventListener('push', (event) => {
     // If the message does not have a top-level notification object (e.g. data-only push on mobile)
     if (rawData && !rawData.notification && rawData.data) {
       const title = rawData.data.title || 'BIT Mesra Campus Alert';
-      const notificationIcon = rawData.data.icon || '/bit-mesra-logo.png';
-      const notificationBadge = rawData.data.badge || '/bit-mesra-logo.png';
+      const notificationIcon = sanitizeNotificationIcon(rawData.data.icon);
+      const notificationBadge = sanitizeNotificationIcon(rawData.data.badge);
       const options = {
         body: rawData.data.body || 'New campus update.',
         icon: notificationIcon,

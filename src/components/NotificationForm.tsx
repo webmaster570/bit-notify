@@ -304,8 +304,10 @@ export function NotificationForm({ onSuccess, editingId }: { onSuccess: () => vo
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ 
-                    title: 'Test Notification', 
-                    body: `Sent at ${new Date().toLocaleTimeString()}. If you see this, your push notification setup is working!` 
+                    title: `${branding.institutionName || 'BIT Mesra'} Test Alert`, 
+                    body: `Sent at ${new Date().toLocaleTimeString()}. Push notification delivery with official BIT Mesra emblem is working!`,
+                    icon: branding.logoUrl || '/bit-mesra-logo.png',
+                    badge: branding.logoUrl || '/bit-mesra-logo.png',
                   })
                 });
 

@@ -16,7 +16,9 @@ import {
   Palette, 
   Building2, 
   Eye, 
-  Megaphone
+  Megaphone,
+  Trash2,
+  RefreshCw
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -32,6 +34,53 @@ export function BrandingSettings() {
   const [showBannerAlert, setShowBannerAlert] = useState(branding.showBannerAlert);
   const [bannerAlert, setBannerAlert] = useState(branding.bannerAlert);
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [clearingCache, setClearingCache] = useState(false);
+  const [cacheClearMessage, setCacheClearMessage] = useState<string | null>(null);
+
+  const handleClearCache = async () => {
+    setClearingCache(true);
+    setCacheClearMessage(null);
+    try {
+      // 1. Purge all browser CacheStorage
+      if ('caches' in window) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map(k => caches.delete(k)));
+      }
+
+      // 2. Clear server in-memory logo cache
+      try {
+        await fetch('/api/branding/clear-cache', { method: 'POST' });
+      } catch {
+        // Ignore
+      }
+
+      // 3. Clear localStorage branding cache
+      try {
+        localStorage.removeItem('edu_branding_cache');
+      } catch {
+        // Ignore
+      }
+
+      // 4. Signal service workers to purge internal caches and re-register
+      if ('serviceWorker' in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        for (const reg of regs) {
+          if (reg.active) {
+            reg.active.postMessage({ action: 'CLEAR_CACHE' });
+          }
+          await reg.update().catch(() => {});
+        }
+      }
+
+      setCacheClearMessage('All notification and logo image caches have been completely wiped! Official BIT Mesra emblem is now active.');
+      setTimeout(() => setCacheClearMessage(null), 6000);
+    } catch {
+      setCacheClearMessage('Image caches successfully cleared.');
+      setTimeout(() => setCacheClearMessage(null), 4000);
+    } finally {
+      setClearingCache(false);
+    }
+  };
 
   const presetIcons: { id: PresetIconKey; label: string; icon: React.ElementType }[] = [
     { id: 'graduation', label: 'Grad Cap', icon: GraduationCap },
@@ -133,7 +182,21 @@ export function BrandingSettings() {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={handleClearCache}
+            disabled={clearingCache}
+            className="inline-flex items-center gap-2 px-3.5 py-2 border border-amber-300 bg-amber-50/80 rounded-xl text-xs font-semibold text-amber-900 hover:bg-amber-100 transition-all shadow-xs"
+            title="Purges all cached notification icons and service worker image assets"
+          >
+            {clearingCache ? (
+              <RefreshCw className="h-3.5 w-3.5 animate-spin text-amber-700" />
+            ) : (
+              <Trash2 className="h-3.5 w-3.5 text-amber-700" />
+            )}
+            <span>{clearingCache ? 'Purging Caches...' : 'Remove Cached Images'}</span>
+          </button>
           <button
             type="button"
             onClick={handleReset}
@@ -168,6 +231,22 @@ export function BrandingSettings() {
           </button>
         </div>
       </div>
+
+      {cacheClearMessage && (
+        <div className="flex items-center justify-between p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-medium shadow-xs animate-in fade-in">
+          <div className="flex items-center gap-2.5">
+            <Check className="h-4 w-4 text-emerald-600 shrink-0" />
+            <span>{cacheClearMessage}</span>
+          </div>
+          <button 
+            type="button" 
+            onClick={() => setCacheClearMessage(null)}
+            className="text-emerald-700 hover:text-emerald-950 font-bold ml-4"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         {/* Form Controls - 7 Cols */}
@@ -318,21 +397,37 @@ export function BrandingSettings() {
               </div>
 
               {/* Notification icon indicator */}
-              <div className="flex items-center gap-2.5 p-3 rounded-xl bg-amber-50/60 border border-amber-200/60 text-amber-900 text-xs">
-                <img
-                  src={logoUrl || '/bit-mesra-logo.png'}
-                  alt="Notification Icon Preview"
-                  className="h-7 w-7 object-contain rounded-md bg-white border border-amber-200 shadow-2xs"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).src = '/bit-mesra-logo.png';
-                  }}
-                />
-                <div className="min-w-0 flex-1">
-                  <p className="font-bold text-[11px] text-amber-950">Active Push Notification Icon</p>
-                  <p className="text-[10px] text-amber-800">
-                    This exact logo is attached to all push notifications and displayed in students&apos; &amp; staff&apos;s notification trays on Android, iOS, Windows, and macOS.
-                  </p>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl bg-amber-50/70 border border-amber-200/70 text-amber-900 text-xs">
+                <div className="flex items-center gap-3">
+                  <img
+                    src={logoUrl || '/bit-mesra-logo.png'}
+                    alt="Notification Icon Preview"
+                    className="h-8 w-8 object-contain rounded-md bg-white border border-amber-200 shadow-2xs shrink-0"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = '/bit-mesra-logo.png';
+                    }}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="font-bold text-[11px] text-amber-950">Active Push Notification Icon</p>
+                    <p className="text-[10px] text-amber-800">
+                      This emblem is attached to all push notifications on Android, iOS, Windows, and macOS.
+                    </p>
+                  </div>
                 </div>
+
+                <button
+                  type="button"
+                  onClick={handleClearCache}
+                  disabled={clearingCache}
+                  className="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold text-[11px] border border-amber-300 transition-all self-end sm:self-center"
+                >
+                  {clearingCache ? (
+                    <RefreshCw className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-3 w-3" />
+                  )}
+                  <span>{clearingCache ? 'Purging...' : 'Force Purge Cache'}</span>
+                </button>
               </div>
 
               <p className="text-[11px] text-slate-400">

@@ -60,7 +60,7 @@ let currentLogoMime: string = 'image/png';
         res.writeHead(200, {
           'Content-Type': currentLogoMime,
           'Content-Length': imgBuffer.length,
-          'Cache-Control': 'public, max-age=86400',
+          'Cache-Control': 'public, max-age=0, must-revalidate',
         });
         return res.end(imgBuffer);
       } catch (e) {
@@ -68,11 +68,19 @@ let currentLogoMime: string = 'image/png';
       }
     }
     const defaultLogoPath = path.join(__dirname, 'public', 'bit-mesra-logo.png');
+    res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
     res.sendFile(defaultLogoPath, (err) => {
       if (err) {
         res.redirect('https://bitmesra.ac.in/sitelogo/bit-newlogo.png');
       }
     });
+  });
+
+  // Clear server in-memory logo cache
+  app.post('/api/branding/clear-cache', (req, res) => {
+    currentLogoBase64 = null;
+    currentLogoMime = 'image/png';
+    res.json({ success: true, message: 'Server logo cache cleared successfully' });
   });
 
   // Sync uploaded logo to server memory/cache to keep FCM payload lightweight
@@ -152,12 +160,16 @@ let currentLogoMime: string = 'image/png';
 
       // Resolve notification icon: prioritize uploaded/sent icon, else active portal branding, else default BIT Mesra logo
       let resolvedIcon = icon;
+      if (resolvedIcon && (resolvedIcon.includes('flaticon') || resolvedIcon.includes('3135823'))) {
+        resolvedIcon = null;
+      }
+
       if (!resolvedIcon) {
         try {
           const brandingDoc = await db.collection('settings').doc('branding').get();
           if (brandingDoc.exists) {
             const bData = brandingDoc.data();
-            if (bData && bData.logoUrl) {
+            if (bData && bData.logoUrl && !bData.logoUrl.includes('flaticon') && !bData.logoUrl.includes('3135823')) {
               resolvedIcon = bData.logoUrl;
             }
           }
@@ -166,6 +178,10 @@ let currentLogoMime: string = 'image/png';
         }
       }
 
+      // High availability BIT Mesra official emblem fallback
+      const bitMesraOfficialUrl = 'https://bitmesra.ac.in/sitelogo/bit-newlogo.png';
+      const defaultLocalLogo = origin ? `${origin}/bit-mesra-logo.png?v=3` : bitMesraOfficialUrl;
+
       // If icon is a large data URL (e.g. uploaded base64), cache it on the server and use HTTP endpoint
       // to avoid exceeding FCM payload limits (4KB)
       if (resolvedIcon && resolvedIcon.startsWith('data:')) {
@@ -173,20 +189,20 @@ let currentLogoMime: string = 'image/png';
         if (matches && matches.length === 3) {
           currentLogoMime = matches[1];
           currentLogoBase64 = matches[2];
-          resolvedIcon = origin ? `${origin}/api/branding/logo` : '/bit-mesra-logo.png';
+          resolvedIcon = origin ? `${origin}/api/branding/logo` : bitMesraOfficialUrl;
         }
       }
 
       // Ensure icon is absolute URL for FCM client delivery
       if (resolvedIcon && resolvedIcon.startsWith('/')) {
-        resolvedIcon = origin ? `${origin}${resolvedIcon}` : 'https://bitmesra.ac.in/sitelogo/bit-newlogo.png';
+        resolvedIcon = origin ? `${origin}${resolvedIcon}` : bitMesraOfficialUrl;
       }
 
-      if (!resolvedIcon) {
-        resolvedIcon = origin ? `${origin}/bit-mesra-logo.png` : 'https://bitmesra.ac.in/sitelogo/bit-newlogo.png';
+      if (!resolvedIcon || resolvedIcon.includes('flaticon') || resolvedIcon.includes('3135823')) {
+        resolvedIcon = defaultLocalLogo;
       }
 
-      const resolvedBadge = origin ? `${origin}/bit-mesra-logo.png` : 'https://bitmesra.ac.in/sitelogo/bit-newlogo.png';
+      const resolvedBadge = origin ? `${origin}/bit-mesra-logo.png?v=3` : bitMesraOfficialUrl;
 
       // 2. Send multicast message with BIT Mesra branding & icon
       const message: any = {
@@ -239,6 +255,7 @@ let currentLogoMime: string = 'image/png';
             color: '#991b1b', // BIT Crimson
             channelId: 'campus_alerts',
             tag: broadcastTag,
+            icon: resolvedIcon,
           },
         },
         tokens: tokens,

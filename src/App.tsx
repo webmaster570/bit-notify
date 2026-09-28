@@ -18,18 +18,30 @@ export default function App() {
   const { branding } = useBranding();
 
   useEffect(() => {
+    // Automatically purge old cacheStorage versions on client startup
+    if (typeof window !== 'undefined' && 'caches' in window) {
+      caches.keys().then((names) => {
+        names.forEach((name) => {
+          if (name !== 'edunotify-branding-v3') {
+            console.log('[App] Purged old cacheStorage:', name);
+            caches.delete(name);
+          }
+        });
+      }).catch(() => {});
+    }
+
     if (user) {
       console.log('User detected, initializing notifications for:', user.email);
       
-      // Explicitly register service worker for broader compatibility
+      // Explicitly register service worker with version query to prevent HTTP caching of SW script
       if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('/firebase-messaging-sw.js')
+        navigator.serviceWorker.register('/firebase-messaging-sw.js?v=3')
           .then((registration) => {
             console.log('Service Worker registered with scope:', registration.scope);
+            // Force service worker update check immediately
+            registration.update().catch(() => {});
             
             // Only auto-fetch token if browser permission is already granted.
-            // Never invoke Notification.requestPermission() automatically on page load,
-            // as modern browsers automatically block/deny permission prompts without user gesture.
             if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
               return requestForToken(registration);
             }
@@ -55,8 +67,16 @@ export default function App() {
           // Show browser notification if permitted
           if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
             const title = payload.notification?.title || payload.data?.title || `${branding.institutionName || 'BIT Mesra'} Alert`;
-            const iconUrl = payload.notification?.icon || payload.data?.icon || branding.logoUrl || '/bit-mesra-logo.png';
-            const badgeUrl = (payload.notification as any)?.badge || payload.data?.badge || '/bit-mesra-logo.png';
+            
+            let iconUrl = payload.notification?.icon || payload.data?.icon;
+            if (!iconUrl || iconUrl.includes('flaticon') || iconUrl.includes('3135823')) {
+              iconUrl = branding.logoUrl || '/bit-mesra-logo.png?v=3';
+            }
+            let badgeUrl = (payload.notification as any)?.badge || payload.data?.badge;
+            if (!badgeUrl || badgeUrl.includes('flaticon') || badgeUrl.includes('3135823')) {
+              badgeUrl = branding.logoUrl || '/bit-mesra-logo.png?v=3';
+            }
+
             const options: any = {
               body: payload.notification?.body || payload.data?.body || 'New announcement available.',
               icon: iconUrl,
