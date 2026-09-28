@@ -9,6 +9,7 @@ export function NotificationPermissionBanner({ compact = false }: { compact?: bo
   const [isIframe, setIsIframe] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
   const [tokenSummary, setTokenSummary] = useState<string | null>(null);
+  const [fullToken, setFullToken] = useState<string | null>(null);
   const [testStatus, setTestStatus] = useState<string | null>(null);
 
   useEffect(() => {
@@ -33,6 +34,7 @@ export function NotificationPermissionBanner({ compact = false }: { compact?: bo
       getDoc(doc(db, 'fcmTokens', auth.currentUser.uid)).then(snap => {
         if (snap.exists() && snap.data().token) {
           const t = snap.data().token;
+          setFullToken(t);
           setTokenSummary(`${t.slice(0, 10)}...${t.slice(-6)}`);
         }
       }).catch(err => {
@@ -48,6 +50,7 @@ export function NotificationPermissionBanner({ compact = false }: { compact?: bo
       const reg = 'serviceWorker' in navigator ? await navigator.serviceWorker.ready : undefined;
       const t = await requestForToken(reg);
       if (t) {
+        setFullToken(t);
         setTokenSummary(`${t.slice(0, 10)}...${t.slice(-6)}`);
         setPermission('granted');
       } else {
@@ -70,6 +73,7 @@ export function NotificationPermissionBanner({ compact = false }: { compact?: bo
         body: JSON.stringify({
           title: 'EduNotify Test Alert',
           body: `Verification test received at ${new Date().toLocaleTimeString()}! Push notification is operational.`,
+          testToken: fullToken || undefined,
         }),
       });
 

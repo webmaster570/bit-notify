@@ -38,12 +38,9 @@ if (getApps().length === 0) {
 }
 
 // Use the specific database ID from the config or environment
-// Default to "(default)" if on Vercel (custom project) unless specified
-const isVercel = !!process.env.VERCEL;
-const defaultDatabaseId = isVercel ? "(default)" : "ai-studio-45fb3207-d536-45da-87f6-8b2651c59b61";
-const databaseId = process.env.FIREBASE_DATABASE_ID || defaultDatabaseId;
+const databaseId = process.env.FIREBASE_DATABASE_ID || "ai-studio-45fb3207-d536-45da-87f6-8b2651c59b61";
 
-const db = getFirestore(databaseId);
+let db = getFirestore(databaseId);
 const messaging = getMessaging();
 
 console.log(`Firestore initialized with projectId: ${getApps()[0].options.projectId}, databaseId: ${databaseId}`);
