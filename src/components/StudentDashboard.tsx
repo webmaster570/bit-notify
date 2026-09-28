@@ -6,6 +6,7 @@ import { Layout } from './Layout';
 import { NotificationList } from './NotificationList';
 import { UserProfile } from '../hooks/useAuth';
 import { Bell, Shield, Calendar } from 'lucide-react';
+import { NotificationPermissionBanner } from './NotificationPermissionBanner';
 
 export function StudentDashboard({ profile }: { profile: UserProfile }) {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -52,6 +53,8 @@ export function StudentDashboard({ profile }: { profile: UserProfile }) {
                 </div>
               </div>
             </div>
+
+            <NotificationPermissionBanner />
 
             <div className="space-y-6">
               <div className="flex items-center justify-between">

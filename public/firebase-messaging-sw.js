@@ -14,12 +14,13 @@ const messaging = firebase.messaging();
 
 messaging.onBackgroundMessage((payload) => {
   console.log('[firebase-messaging-sw.js] Received background message ', payload);
-  const notificationTitle = payload.notification.title;
+  const notificationTitle = payload?.notification?.title || payload?.data?.title || 'EduNotify Campus Alert';
   const notificationOptions = {
-    body: payload.notification.body,
-    icon: payload.notification.icon || 'https://cdn-icons-png.flaticon.com/512/3135/3135823.png',
+    body: payload?.notification?.body || payload?.data?.body || 'New announcement available.',
+    icon: payload?.notification?.icon || 'https://cdn-icons-png.flaticon.com/512/3135/3135823.png',
+    badge: 'https://cdn-icons-png.flaticon.com/512/3135/3135823.png',
     data: {
-      url: payload.fcmOptions?.link || '/'
+      url: payload?.fcmOptions?.link || payload?.data?.url || '/'
     }
   };
 

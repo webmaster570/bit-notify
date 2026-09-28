@@ -9,82 +9,7 @@ import { UserProfile } from '../hooks/useAuth';
 import { Users, Bell, TrendingUp, CheckCircle2, Send } from 'lucide-react';
 
 import { UserManagement } from './UserManagement';
-import { requestForToken } from '../lib/firebase';
-
-function NotificationStatusChecker() {
-  const [status, setStatus] = useState<'idle' | 'checking' | 'active' | 'denied' | 'error'>('idle');
-  const [token, setToken] = useState<string | null>(null);
-
-  const checkStatus = async () => {
-    setStatus('checking');
-    try {
-      const permission = await Notification.permission;
-      if (permission === 'denied') {
-        setStatus('denied');
-        return;
-      }
-      
-      const registration = await navigator.serviceWorker.getRegistration('/firebase-messaging-sw.js') 
-        || await navigator.serviceWorker.register('/firebase-messaging-sw.js');
-        
-      const t = await requestForToken(registration);
-      if (t) {
-        setToken(t);
-        setStatus('active');
-      } else {
-        setStatus('error');
-      }
-    } catch (err) {
-      console.error(err);
-      setStatus('error');
-    }
-  };
-
-  return (
-    <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="font-bold text-slate-900">Push Status</h3>
-        <span className={cn(
-          "px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border",
-          status === 'active' ? "bg-emerald-50 text-emerald-700 border-emerald-100" :
-          status === 'denied' ? "bg-red-50 text-red-700 border-red-100" :
-          "bg-slate-50 text-slate-500 border-slate-200"
-        )}>
-          {status === 'active' ? 'Registered' : status === 'denied' ? 'Permission Denied' : 'Inactive'}
-        </span>
-      </div>
-      
-      {status === 'active' ? (
-        <div className="space-y-2">
-          <p className="text-xs text-slate-500">Your browser is ready to receive notifications.</p>
-          <div className="bg-slate-50 p-2 rounded-lg border border-slate-100 overflow-hidden">
-            <p className="text-[8px] font-mono text-slate-400 break-all">{token}</p>
-          </div>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          <p className="text-xs text-slate-500">
-            {status === 'denied' 
-              ? 'You have blocked notifications. Please reset permissions in your browser settings (click the lock icon in the URL bar).' 
-              : 'Register this device to receive test broadcasts. Make sure you are using Chrome, Edge, or Firefox.'}
-          </p>
-          <button
-            onClick={checkStatus}
-            disabled={status === 'checking'}
-            className="w-full py-2 bg-blue-50 text-blue-700 text-xs font-bold rounded-xl border border-blue-100 hover:bg-blue-100 transition-all"
-          >
-            {status === 'checking' ? 'Checking...' : 'Check/Register Device'}
-          </button>
-          {status === 'error' && (
-            <p className="text-[10px] text-red-500 bg-red-50 p-2 rounded-lg border border-red-100">
-              Registration failed. Try clearing site data and refreshing.
-            </p>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
+import { NotificationPermissionBanner } from './NotificationPermissionBanner';
 
 export function AdminDashboard({ profile }: { profile: UserProfile }) {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -175,7 +100,7 @@ export function AdminDashboard({ profile }: { profile: UserProfile }) {
                   </button>
                 </div>
                 
-                <NotificationStatusChecker />
+                <NotificationPermissionBanner />
               </div>
             </div>
           </div>

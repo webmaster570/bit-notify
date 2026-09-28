@@ -64,8 +64,8 @@ console.log(`Firestore initialized with projectId: ${getApps()[0].options.projec
       console.log(`Total tokens in database: ${tokensSnapshot.size}`);
 
       let tokens = tokensSnapshot.docs
-        .map(doc => doc.data())
-        .filter(data => {
+        .map((doc: FirebaseFirestore.QueryDocumentSnapshot) => doc.data())
+        .filter((data: FirebaseFirestore.DocumentData) => {
           // If targetGroup is provided, filter tokens
           if (targetGroup && Object.keys(targetGroup).length > 0) {
             const deptMatch = !targetGroup.department || targetGroup.department === 'All' || targetGroup.department === data.department;
@@ -80,8 +80,8 @@ console.log(`Firestore initialized with projectId: ${getApps()[0].options.projec
           }
           return true;
         })
-        .map(data => data.token)
-        .filter(token => !!token); // Remove empty tokens
+        .map((data: FirebaseFirestore.DocumentData) => data.token as string)
+        .filter((token: string) => !!token); // Remove empty tokens
 
       // Unique tokens to avoid duplicate sends
       tokens = [...new Set(tokens)];

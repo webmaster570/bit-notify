@@ -25,8 +25,13 @@ export default function App() {
           .then((registration) => {
             console.log('Service Worker registered with scope:', registration.scope);
             
-            // Now request token
-            return requestForToken(registration);
+            // Only auto-fetch token if browser permission is already granted.
+            // Never invoke Notification.requestPermission() automatically on page load,
+            // as modern browsers automatically block/deny permission prompts without user gesture.
+            if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+              return requestForToken(registration);
+            }
+            return null;
           })
           .then(token => {
             if (token) {

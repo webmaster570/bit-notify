@@ -81,6 +81,11 @@ export const requestForToken = async (registration?: ServiceWorkerRegistration) 
     console.log('Messaging not supported/initialized');
     return null;
   }
+
+  if (typeof window === 'undefined' || !('Notification' in window)) {
+    console.log('Notifications not supported by this browser');
+    return null;
+  }
   
   try {
     // Request permission first
@@ -93,9 +98,18 @@ export const requestForToken = async (registration?: ServiceWorkerRegistration) 
       return null;
     }
 
+    let swRegistration = registration;
+    if (!swRegistration && 'serviceWorker' in navigator) {
+      try {
+        swRegistration = await navigator.serviceWorker.ready;
+      } catch (swErr) {
+        console.warn('Could not get navigator.serviceWorker.ready:', swErr);
+      }
+    }
+
     const currentToken = await getToken(messaging, {
       vapidKey: import.meta.env.VITE_VAPID_KEY || 'BJO530hzi2JWHttuCtYUrtwWKKWJGCeDka_xwc9nXTzHaeDHjQh11ADLKtl_o34OEOiNXdxsydAIp6CMqLo_q0w',
-      serviceWorkerRegistration: registration
+      serviceWorkerRegistration: swRegistration
     });
     
     if (currentToken) {
@@ -103,9 +117,15 @@ export const requestForToken = async (registration?: ServiceWorkerRegistration) 
       
       // Store the token for the current user in Firestore
       if (auth.currentUser) {
-        // Fetch user profile to store alongside token for targeted broadcasting
-        const userDoc = await getDocFromServer(doc(db, 'users', auth.currentUser.uid));
-        const userData = userDoc.exists() ? userDoc.data() : {};
+        let userData: any = {};
+        try {
+          const userDoc = await getDocFromServer(doc(db, 'users', auth.currentUser.uid));
+          if (userDoc.exists()) {
+            userData = userDoc.data();
+          }
+        } catch (profileErr) {
+          console.warn('Profile read skipped or unavailable during token save:', profileErr);
+        }
 
         const tokenRef = doc(db, 'fcmTokens', auth.currentUser.uid);
         await setDoc(tokenRef, {
