@@ -3,7 +3,7 @@ import { Bell, AlertTriangle, ExternalLink, RefreshCw, CheckCircle2, ShieldAlert
 import { requestForToken, auth, db, getDeviceId, getDeviceType } from '../lib/firebase';
 import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 
-export function NotificationPermissionBanner({ compact = false }: { compact?: boolean }) {
+export function NotificationPermissionBanner({ compact = false, isAdmin = false }: { compact?: boolean; isAdmin?: boolean }) {
   const [permission, setPermission] = useState<NotificationPermission | 'unsupported'>('default');
   const [isIframe, setIsIframe] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
@@ -324,18 +324,20 @@ export function NotificationPermissionBanner({ compact = false }: { compact?: bo
           </div>
         )}
 
-        <div className="flex items-center justify-between pt-1">
-          <span className="text-[11px] text-slate-500">
-            {testStatus ? <strong className="text-blue-600">{testStatus}</strong> : `Test delivery on this ${isMobile ? 'phone' : 'computer'}:`}
-          </span>
-          <button
-            onClick={handleSendTestPush}
-            className="px-3 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 transition-all flex items-center gap-1.5 shadow-sm"
-          >
-            <Bell className="h-3.5 w-3.5" />
-            <span>Send Quick Test</span>
-          </button>
-        </div>
+        {isAdmin && (
+          <div className="flex items-center justify-between pt-2 border-t border-emerald-100">
+            <span className="text-[11px] text-slate-500">
+              {testStatus ? <strong className="text-blue-600">{testStatus}</strong> : `Test delivery on this ${isMobile ? 'phone' : 'computer'}:`}
+            </span>
+            <button
+              onClick={handleSendTestPush}
+              className="px-3 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 transition-all flex items-center gap-1.5 shadow-sm"
+            >
+              <Bell className="h-3.5 w-3.5" />
+              <span>Send Quick Test</span>
+            </button>
+          </div>
+        )}
       </div>
     );
   }

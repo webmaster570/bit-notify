@@ -2,10 +2,12 @@ import React, { useState } from 'react';
 import { auth, db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
-import { GraduationCap, Mail, Lock, User, BookOpen, Calendar, Building } from 'lucide-react';
+import { GraduationCap, Shield, Landmark, Bell, BookOpen, Sparkles, Mail, Lock, User, Calendar, Building } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { useBranding } from '../context/BrandingContext';
 
 export function AuthView() {
+  const { branding, theme } = useBranding();
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -56,15 +58,31 @@ export function AuthView() {
     <div className="min-h-screen bg-slate-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <div className="flex justify-center">
-          <div className="bg-blue-600 p-3 rounded-xl shadow-lg">
-            <GraduationCap className="h-10 w-10 text-white" />
-          </div>
+          {branding.logoUrl ? (
+            <img
+              src={branding.logoUrl}
+              alt={branding.title}
+              className="h-16 w-16 object-contain rounded-2xl shadow-md p-1 bg-white border border-slate-200"
+            />
+          ) : (
+            <div className={cn("p-3.5 rounded-2xl shadow-md text-white", theme.bgClass)}>
+              {branding.presetIcon === 'shield' && <Shield className="h-9 w-9" />}
+              {branding.presetIcon === 'landmark' && <Landmark className="h-9 w-9" />}
+              {branding.presetIcon === 'bell' && <Bell className="h-9 w-9" />}
+              {branding.presetIcon === 'book' && <BookOpen className="h-9 w-9" />}
+              {branding.presetIcon === 'sparkles' && <Sparkles className="h-9 w-9" />}
+              {(!branding.presetIcon || branding.presetIcon === 'graduation') && <GraduationCap className="h-9 w-9" />}
+            </div>
+          )}
         </div>
-        <h2 className="mt-6 text-center text-3xl font-extrabold text-slate-900 tracking-tight">
-          EduNotify
+        <h2 className="mt-4 text-center text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+          {branding.title || 'EduNotify'}
         </h2>
-        <p className="mt-2 text-center text-sm text-slate-600">
-          {isLogin ? "Welcome back to your campus" : "Join your institute's network"}
+        <p className="mt-1 text-center text-xs font-semibold text-slate-500">
+          {branding.institutionName || 'Campus Broadcast System'}
+        </p>
+        <p className="mt-1 text-center text-xs text-slate-400">
+          {isLogin ? "Sign in to access your campus announcements" : "Create an account on the institutional network"}
         </p>
       </div>
 
