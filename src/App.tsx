@@ -51,23 +51,39 @@ export default function App() {
           console.log('Foreground message received:', payload);
           
           // Show browser notification if permitted
-          if (Notification.permission === 'granted') {
-            const title = payload.notification?.title || 'EduNotify';
-            const options = {
-              body: payload.notification?.body,
-              icon: 'https://cdn-icons-png.flaticon.com/512/3135/3135823.png',
+          if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+            const title = payload.notification?.title || payload.data?.title || 'EduNotify Campus Alert';
+            const options: any = {
+              body: payload.notification?.body || payload.data?.body || 'New announcement available.',
+              icon: payload.notification?.icon || 'https://cdn-icons-png.flaticon.com/512/3135/3135823.png',
               badge: 'https://cdn-icons-png.flaticon.com/512/3135/3135823.png',
-              tag: 'broadcast-notification' // Prevent multiple notifications for same thing
+              // Vibration pattern for mobile
+              vibrate: [200, 100, 200, 100, 200],
+              tag: payload.data?.tag || ('edu-notify-' + Date.now()),
+              renotify: true,
+              data: {
+                url: payload.data?.url || '/'
+              }
             };
             
-            // Try using the service worker registration to show the notification
-            // as it is more reliable than new Notification()
-            navigator.serviceWorker.ready.then(registration => {
-              registration.showNotification(title, options);
-            }).catch(() => {
-              // Fallback
-              new Notification(title, options);
-            });
+            // Prefer showing via active Service Worker registration
+            if ('serviceWorker' in navigator) {
+              navigator.serviceWorker.ready.then(registration => {
+                registration.showNotification(title, options);
+              }).catch(() => {
+                try {
+                  new Notification(title, options);
+                } catch {
+                  // Ignore
+                }
+              });
+            } else {
+              try {
+                new Notification(title, options);
+              } catch {
+                // Ignore
+              }
+            }
           }
         });
         return () => unsubscribe();

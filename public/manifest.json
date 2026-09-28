@@ -1,12 +1,19 @@
 {
-  "name": "EduNotify",
+  "name": "EduNotify - Campus Broadcasts",
   "short_name": "EduNotify",
-  "description": "Real-time campus notification system",
+  "description": "Real-time notification and announcement platform for educational organizations.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#2563eb",
+  "orientation": "portrait",
   "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/3135/3135823.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
     {
       "src": "https://cdn-icons-png.flaticon.com/512/3135/3135823.png",
       "sizes": "512x512",

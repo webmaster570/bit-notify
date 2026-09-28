@@ -50,63 +50,108 @@ console.log(`Firestore initialized with projectId: ${getApps()[0].options.projec
   });
 
   app.post('/api/broadcast', async (req, res) => {
-    const { title, body, targetGroup } = req.body;
-    console.log('Broadcast request received:', { title, targetGroup });
+    const { title, body, targetGroup, testToken, token } = req.body;
+    console.log('Broadcast request received:', { title, targetGroup, hasTestToken: !!(testToken || token) });
 
     try {
+      let tokens: string[] = [];
+      const directToken = testToken || token;
+      if (directToken && typeof directToken === 'string') {
+        tokens.push(directToken);
+      }
+
       // 1. Fetch tokens from Firestore with filtering
       let query: any = db.collection('fcmTokens');
-      
       const tokensSnapshot = await query.get();
       console.log(`Total tokens in database: ${tokensSnapshot.size}`);
 
-      let tokens = tokensSnapshot.docs
-        .map((doc: FirebaseFirestore.QueryDocumentSnapshot) => doc.data())
-        .filter((data: FirebaseFirestore.DocumentData) => {
-          // If targetGroup is provided, filter tokens
-          if (targetGroup && Object.keys(targetGroup).length > 0) {
-            const deptMatch = !targetGroup.department || targetGroup.department === 'All' || targetGroup.department === data.department;
-            const courseMatch = !targetGroup.course || targetGroup.course === 'All' || targetGroup.course === data.course;
-            const yearMatch = !targetGroup.academicYear || targetGroup.academicYear === 'All' || targetGroup.academicYear === data.academicYear;
-            
-            const isMatch = deptMatch && courseMatch && yearMatch;
-            if (!isMatch) {
-              console.log(`Token for ${data.email} filtered out. Target:`, targetGroup, 'Actual:', { dept: data.department, course: data.course, year: data.academicYear });
-            }
-            return isMatch;
-          }
-          return true;
-        })
-        .map((data: FirebaseFirestore.DocumentData) => data.token as string)
-        .filter((token: string) => !!token); // Remove empty tokens
+      let mobileCount = 0;
+      let desktopCount = 0;
+      const matchedTokens: string[] = [];
 
+      tokensSnapshot.docs.forEach((doc: FirebaseFirestore.QueryDocumentSnapshot) => {
+        const data = doc.data() || {};
+        const tokenStr = data.token;
+        if (!tokenStr || typeof tokenStr !== 'string') return;
+
+        let isMatch = true;
+        if (targetGroup && Object.keys(targetGroup).length > 0) {
+          const deptMatch = !targetGroup.department || targetGroup.department === 'All' || !data.department || data.department === 'All' || String(targetGroup.department).toLowerCase() === String(data.department).toLowerCase();
+          const courseMatch = !targetGroup.course || targetGroup.course === 'All' || !data.course || data.course === 'All' || String(targetGroup.course).toLowerCase() === String(data.course).toLowerCase();
+          const yearMatch = !targetGroup.academicYear || targetGroup.academicYear === 'All' || !data.academicYear || data.academicYear === 'All' || String(targetGroup.academicYear).toLowerCase() === String(data.academicYear).toLowerCase();
+          isMatch = deptMatch && courseMatch && yearMatch;
+        }
+
+        if (isMatch) {
+          matchedTokens.push(tokenStr);
+          if (data.deviceType === 'mobile' || /Android|webOS|iPhone|iPad/i.test(data.userAgent || '')) {
+            mobileCount++;
+          } else {
+            desktopCount++;
+          }
+        }
+      });
+
+      tokens = [...tokens, ...matchedTokens];
       // Unique tokens to avoid duplicate sends
       tokens = [...new Set(tokens)];
 
       if (tokens.length === 0) {
         console.log('No eligible tokens found for target group:', targetGroup);
-        return res.status(200).json({ success: true, message: 'No eligible tokens found', sentCount: 0 });
+        return res.status(200).json({ success: true, message: 'No eligible tokens found', sentCount: 0, mobileCount: 0, desktopCount: 0 });
       }
 
-      console.log(`Sending broadcast to ${tokens.length} tokens...`);
+      console.log(`Sending broadcast to ${tokens.length} tokens (Mobile: ${mobileCount}, Desktop: ${desktopCount})...`);
 
-      // 2. Send multicast message with enhanced config for web
-      const message = {
+      const broadcastTag = 'campus-broadcast-' + Date.now();
+
+      // 2. Send multicast message with enhanced config for mobile and web
+      const message: any = {
         notification: {
           title: title,
-          body: body,
+          body: body || '',
+        },
+        data: {
+          title: title,
+          body: body || '',
+          url: '/',
+          click_action: '/',
+          tag: broadcastTag,
+          timestamp: String(Date.now()),
+          priority: 'high',
         },
         webpush: {
+          headers: {
+            Urgency: 'high',
+            TTL: '86400',
+          },
           notification: {
             title: title,
-            body: body,
+            body: body || '',
             icon: 'https://cdn-icons-png.flaticon.com/512/3135/3135823.png',
-            click_action: '/',
-            badge: 'https://cdn-icons-png.flaticon.com/512/3135/3135823.png'
+            badge: 'https://cdn-icons-png.flaticon.com/512/3135/3135823.png',
+            vibrate: [200, 100, 200, 100, 200],
+            requireInteraction: true,
+            tag: broadcastTag,
+            renotify: true,
+            silent: false,
+            data: {
+              url: '/',
+            },
           },
-          fcm_options: {
-            link: '/'
-          }
+          fcmOptions: {
+            link: '/',
+          },
+        },
+        android: {
+          priority: 'high',
+          notification: {
+            priority: 'high',
+            defaultSound: true,
+            defaultVibrateTimings: true,
+            channelId: 'campus_alerts',
+            tag: broadcastTag,
+          },
         },
         tokens: tokens,
       };
@@ -124,28 +169,13 @@ console.log(`Firestore initialized with projectId: ${getApps()[0].options.projec
         });
       }
 
-      // Clean up invalid tokens
-      if (response.failureCount > 0) {
-        const invalidTokens: string[] = [];
-        response.responses.forEach((resp, idx) => {
-          if (!resp.success) {
-            const errorCode = resp.error?.code;
-            if (errorCode === 'messaging/invalid-registration-token' || errorCode === 'messaging/registration-token-not-registered') {
-              invalidTokens.push(tokens[idx]);
-            }
-          }
-        });
-
-        if (invalidTokens.length > 0) {
-          console.log(`Cleaning up ${invalidTokens.length} invalid tokens...`);
-          // Batch delete invalid tokens if needed, for now just log
-        }
-      }
-
       res.status(200).json({ 
         success: true, 
         sentCount: response.successCount, 
-        failureCount: response.failureCount 
+        failureCount: response.failureCount,
+        totalTokens: tokens.length,
+        mobileCount,
+        desktopCount,
       });
     } catch (error) {
       console.error('Critical Error in /api/broadcast:', error);

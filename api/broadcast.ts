@@ -91,26 +91,41 @@ export default async function handler(req: any, res: any) {
       tokens.push(directToken);
     }
 
+    let mobileCount = 0;
+    let desktopCount = 0;
+
     // 1. Fetch tokens from Firestore
     try {
       const tokensSnapshot = await getTokensSnapshot(primaryDbId);
       console.log(`[api/broadcast] Total tokens in Firestore: ${tokensSnapshot.size}`);
 
-      const dbTokens = tokensSnapshot.docs
-        .map((doc: any) => doc.data())
-        .filter((data: any) => {
-          if (targetGroup && Object.keys(targetGroup).length > 0) {
-            const deptMatch = !targetGroup.department || targetGroup.department === 'All' || targetGroup.department === data.department;
-            const courseMatch = !targetGroup.course || targetGroup.course === 'All' || targetGroup.course === data.course;
-            const yearMatch = !targetGroup.academicYear || targetGroup.academicYear === 'All' || targetGroup.academicYear === data.academicYear;
-            return deptMatch && courseMatch && yearMatch;
-          }
-          return true;
-        })
-        .map((data: any) => data.token)
-        .filter((t: any) => typeof t === 'string' && t.length > 0);
+      const matchedTokens: string[] = [];
 
-      tokens = [...tokens, ...dbTokens];
+      tokensSnapshot.docs.forEach((doc: any) => {
+        const data = doc.data() || {};
+        const tokenStr = data.token;
+        if (!tokenStr || typeof tokenStr !== 'string') return;
+
+        // Target group filter
+        let isMatch = true;
+        if (targetGroup && Object.keys(targetGroup).length > 0) {
+          const deptMatch = !targetGroup.department || targetGroup.department === 'All' || !data.department || data.department === 'All' || String(targetGroup.department).toLowerCase() === String(data.department).toLowerCase();
+          const courseMatch = !targetGroup.course || targetGroup.course === 'All' || !data.course || data.course === 'All' || String(targetGroup.course).toLowerCase() === String(data.course).toLowerCase();
+          const yearMatch = !targetGroup.academicYear || targetGroup.academicYear === 'All' || !data.academicYear || data.academicYear === 'All' || String(targetGroup.academicYear).toLowerCase() === String(data.academicYear).toLowerCase();
+          isMatch = deptMatch && courseMatch && yearMatch;
+        }
+
+        if (isMatch) {
+          matchedTokens.push(tokenStr);
+          if (data.deviceType === 'mobile' || /Android|webOS|iPhone|iPad/i.test(data.userAgent || '')) {
+            mobileCount++;
+          } else {
+            desktopCount++;
+          }
+        }
+      });
+
+      tokens = [...tokens, ...matchedTokens];
     } catch (dbErr: any) {
       console.error('[api/broadcast] Could not query Firestore fcmTokens:', dbErr);
       // If we don't have directToken and DB query failed, propagate error
@@ -123,26 +138,61 @@ export default async function handler(req: any, res: any) {
 
     if (tokens.length === 0) {
       console.log('[api/broadcast] No eligible tokens found for target group:', targetGroup);
-      return res.status(200).json({ success: true, message: 'No eligible tokens found', sentCount: 0 });
+      return res.status(200).json({ success: true, message: 'No eligible tokens found', sentCount: 0, mobileCount: 0, desktopCount: 0 });
     }
 
-    console.log(`[api/broadcast] Sending broadcast to ${tokens.length} token(s)...`);
+    console.log(`[api/broadcast] Sending broadcast to ${tokens.length} token(s) (Mobile: ${mobileCount}, Desktop: ${desktopCount})...`);
 
-    const message = {
+    const broadcastTag = 'campus-broadcast-' + Date.now();
+
+    const message: any = {
       notification: {
         title: title,
         body: messageBody || '',
       },
+      // Data payload for mobile background workers and Android apps
+      data: {
+        title: title,
+        body: messageBody || '',
+        url: '/',
+        click_action: '/',
+        tag: broadcastTag,
+        timestamp: String(Date.now()),
+        priority: 'high',
+      },
+      // Webpush payload for desktop and mobile browsers (Chrome, Edge, Safari PWA)
       webpush: {
+        headers: {
+          Urgency: 'high',
+          TTL: '86400',
+        },
         notification: {
           title: title,
           body: messageBody || '',
           icon: 'https://cdn-icons-png.flaticon.com/512/3135/3135823.png',
-          click_action: '/',
           badge: 'https://cdn-icons-png.flaticon.com/512/3135/3135823.png',
+          vibrate: [200, 100, 200, 100, 200], // Mobile vibration pattern
+          requireInteraction: true,
+          tag: broadcastTag,
+          renotify: true,
+          silent: false,
+          data: {
+            url: '/',
+          },
         },
-        fcm_options: {
+        fcmOptions: {
           link: '/',
+        },
+      },
+      // Android payload for mobile push services
+      android: {
+        priority: 'high',
+        notification: {
+          priority: 'high',
+          defaultSound: true,
+          defaultVibrateTimings: true,
+          channelId: 'campus_alerts',
+          tag: broadcastTag,
         },
       },
       tokens: tokens,
@@ -163,6 +213,9 @@ export default async function handler(req: any, res: any) {
       success: true,
       sentCount: response.successCount,
       failureCount: response.failureCount,
+      totalTokens: tokens.length,
+      mobileCount,
+      desktopCount,
     });
   } catch (error: any) {
     console.error('[api/broadcast] Error:', error);

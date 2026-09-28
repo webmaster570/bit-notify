@@ -76,6 +76,26 @@ export async function testConnection() {
   }
 }
 
+export function getDeviceId(): string {
+  if (typeof window === 'undefined') return 'unknown_device';
+  let deviceId = localStorage.getItem('edu_device_id');
+  if (!deviceId) {
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    deviceId = (isMobile ? 'mob_' : 'desk_') + Math.random().toString(36).substring(2, 8) + '_' + Date.now().toString(36);
+    try {
+      localStorage.setItem('edu_device_id', deviceId);
+    } catch {
+      // Ignore localStorage write failures
+    }
+  }
+  return deviceId;
+}
+
+export function getDeviceType(): 'mobile' | 'desktop' {
+  if (typeof window === 'undefined') return 'desktop';
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ? 'mobile' : 'desktop';
+}
+
 export const requestForToken = async (registration?: ServiceWorkerRegistration) => {
   if (!messaging) {
     console.log('Messaging not supported/initialized');
@@ -114,6 +134,11 @@ export const requestForToken = async (registration?: ServiceWorkerRegistration) 
     
     if (currentToken) {
       console.log('FCM Token generated successfully');
+      try {
+        localStorage.setItem('edu_current_fcm_token', currentToken);
+      } catch {
+        // Ignore
+      }
       
       // Store the token for the current user in Firestore
       if (auth.currentUser) {
@@ -127,17 +152,32 @@ export const requestForToken = async (registration?: ServiceWorkerRegistration) 
           console.warn('Profile read skipped or unavailable during token save:', profileErr);
         }
 
-        const tokenRef = doc(db, 'fcmTokens', auth.currentUser.uid);
-        await setDoc(tokenRef, {
+        const deviceId = getDeviceId();
+        const deviceType = getDeviceType();
+
+        const tokenPayload = {
           token: currentToken,
+          deviceId: deviceId,
+          deviceType: deviceType,
+          platform: typeof navigator !== 'undefined' ? (navigator.platform || 'unknown') : 'unknown',
+          userAgent: typeof navigator !== 'undefined' ? navigator.userAgent.slice(0, 150) : '',
           updatedAt: serverTimestamp(),
           email: auth.currentUser.email,
           uid: auth.currentUser.uid,
           department: userData.department || 'All',
           course: userData.course || 'All',
           academicYear: userData.academicYear || 'All'
-        }, { merge: true });
-        console.log('FCM Token saved to Firestore with profile info');
+        };
+
+        // 1. Save specific per-device token so desktop and mobile devices DO NOT overwrite each other
+        const deviceTokenRef = doc(db, 'fcmTokens', `${auth.currentUser.uid}_${deviceId}`);
+        await setDoc(deviceTokenRef, tokenPayload, { merge: true });
+
+        // 2. Also keep primary user token doc updated for compatibility
+        const userTokenRef = doc(db, 'fcmTokens', auth.currentUser.uid);
+        await setDoc(userTokenRef, tokenPayload, { merge: true });
+
+        console.log(`FCM Token saved to Firestore for device ${deviceId} (${deviceType})`);
       } else {
         console.warn('FCM Token generated but no user is logged in');
       }

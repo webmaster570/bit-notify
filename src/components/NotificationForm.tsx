@@ -99,7 +99,7 @@ export function NotificationForm({ onSuccess, editingId }: { onSuccess: () => vo
       // Trigger push notification via backend if status is 'sent'
       if (status === 'sent') {
         try {
-          await fetch('/api/broadcast', {
+          const pushRes = await fetch('/api/broadcast', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -112,6 +112,8 @@ export function NotificationForm({ onSuccess, editingId }: { onSuccess: () => vo
               }
             })
           });
+          const pushData = await pushRes.json();
+          console.log('[NotificationForm] Push broadcast response:', pushData);
         } catch (pushErr) {
           console.error('Failed to trigger push notification:', pushErr);
         }
@@ -318,7 +320,9 @@ export function NotificationForm({ onSuccess, editingId }: { onSuccess: () => vo
                 }
 
                 if (res.ok) {
-                  alert(`Test Success!\nDevices reached: ${data.sentCount || 0}\nFailures: ${data.failureCount || 0}`);
+                  const mob = data.mobileCount ?? 0;
+                  const desk = data.desktopCount ?? 0;
+                  alert(`Test Broadcast Sent Successfully!\n\nDelivered to: ${data.sentCount || 0} active device(s)\n📱 Mobile devices: ${mob}\n💻 Desktop devices: ${desk}\n\nFailures: ${data.failureCount || 0}`);
                 } else {
                   alert(`Test Failed: ${data.error || data.details || 'Unknown error'}`);
                 }
