@@ -16,13 +16,14 @@ import { useBranding } from './context/BrandingContext';
 export default function App() {
   const { user, profile, loading, error } = useAuth();
   const { branding } = useBranding();
+  const [foregroundAlert, setForegroundAlert] = useState<{ title: string; body: string; icon: string } | null>(null);
 
   useEffect(() => {
     // Automatically purge old cacheStorage versions on client startup
     if (typeof window !== 'undefined' && 'caches' in window) {
       caches.keys().then((names) => {
         names.forEach((name) => {
-          if (name !== 'edunotify-branding-v3') {
+          if (name !== 'edunotify-branding-v4') {
             console.log('[App] Purged old cacheStorage:', name);
             caches.delete(name);
           }
@@ -35,15 +36,16 @@ export default function App() {
       
       // Explicitly register service worker with version query to prevent HTTP caching of SW script
       if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('/firebase-messaging-sw.js?v=3')
-          .then((registration) => {
+        navigator.serviceWorker.register('/firebase-messaging-sw.js?v=4')
+          .then(async (registration) => {
             console.log('Service Worker registered with scope:', registration.scope);
-            // Force service worker update check immediately
             registration.update().catch(() => {});
+
+            // Ensure worker is in ready/active state before requesting token
+            const activeReg = await navigator.serviceWorker.ready;
             
-            // Only auto-fetch token if browser permission is already granted.
             if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-              return requestForToken(registration);
+              return requestForToken(activeReg);
             }
             return null;
           })
@@ -51,7 +53,7 @@ export default function App() {
             if (token) {
               console.log('Notification registration successful for:', user.email);
             } else {
-              console.warn('Notification registration failed or was denied for:', user.email);
+              console.warn('Notification registration pending permission for:', user.email);
             }
           })
           .catch(err => {
@@ -62,27 +64,42 @@ export default function App() {
       // Keep listening for foreground messages
       if (messaging) {
         const unsubscribe = onMessage(messaging, (payload) => {
-          console.log('Foreground message received:', payload);
-          
-          // Show browser notification if permitted
-          if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-            const title = payload.notification?.title || payload.data?.title || `${branding.institutionName || 'BIT Mesra'} Alert`;
-            
-            let iconUrl = payload.notification?.icon || payload.data?.icon;
-            if (!iconUrl || iconUrl.includes('flaticon') || iconUrl.includes('3135823')) {
-              iconUrl = branding.logoUrl || '/bit-mesra-logo.png?v=3';
-            }
-            let badgeUrl = (payload.notification as any)?.badge || payload.data?.badge;
-            if (!badgeUrl || badgeUrl.includes('flaticon') || badgeUrl.includes('3135823')) {
-              badgeUrl = branding.logoUrl || '/bit-mesra-logo.png?v=3';
-            }
+          console.log('Foreground message received on mobile/desktop:', payload);
 
+          const title = payload.notification?.title || payload.data?.title || `${branding.institutionName || 'BIT Mesra'} Alert`;
+          const bodyText = payload.notification?.body || payload.data?.body || 'New announcement available.';
+          
+          let iconUrl = payload.notification?.icon || payload.data?.icon;
+          if (!iconUrl || iconUrl.includes('flaticon') || iconUrl.includes('3135823')) {
+            iconUrl = branding.logoUrl || '/bit-mesra-logo.png?v=4';
+          }
+          let badgeUrl = (payload.notification as any)?.badge || payload.data?.badge;
+          if (!badgeUrl || badgeUrl.includes('flaticon') || badgeUrl.includes('3135823')) {
+            badgeUrl = branding.logoUrl || '/bit-mesra-logo.png?v=4';
+          }
+
+          // Trigger mobile vibration if supported
+          try {
+            if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+              navigator.vibrate([200, 100, 200, 100, 200]);
+            }
+          } catch {}
+
+          // Display in-app banner for instant visibility on phone screen
+          setForegroundAlert({
+            title,
+            body: bodyText,
+            icon: iconUrl
+          });
+          setTimeout(() => setForegroundAlert(null), 8000);
+          
+          // Show OS browser notification if permitted
+          if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
             const options: any = {
-              body: payload.notification?.body || payload.data?.body || 'New announcement available.',
+              body: bodyText,
               icon: iconUrl,
               badge: badgeUrl,
               image: (payload.notification as any)?.image || payload.data?.image || undefined,
-              // Vibration pattern for mobile
               vibrate: [200, 100, 200, 100, 200],
               tag: payload.data?.tag || ('edu-notify-' + Date.now()),
               renotify: true,
@@ -99,16 +116,12 @@ export default function App() {
               }).catch(() => {
                 try {
                   new Notification(title, options);
-                } catch {
-                  // Ignore
-                }
+                } catch {}
               });
             } else {
               try {
                 new Notification(title, options);
-              } catch {
-                // Ignore
-              }
+              } catch {}
             }
           }
         });
@@ -157,10 +170,38 @@ export default function App() {
     course: 'All'
   };
 
-  if (activeProfile.role === 'admin' || activeProfile.role === 'push_admin') {
-    return <AdminDashboard profile={activeProfile} />;
-  }
-
-  return <StudentDashboard profile={activeProfile} />;
+  return (
+    <>
+      {foregroundAlert && (
+        <div className="fixed top-4 left-4 right-4 z-50 max-w-md mx-auto bg-slate-900/95 backdrop-blur-md text-white p-4 rounded-2xl shadow-2xl border border-slate-700 flex items-start gap-3.5 animate-in slide-in-from-top-4 duration-300">
+          <img
+            src={foregroundAlert.icon}
+            alt="BIT Mesra Alert"
+            className="h-10 w-10 object-contain rounded-xl bg-white/10 p-1 shrink-0 border border-white/20"
+            onError={(e) => {
+              (e.target as HTMLImageElement).src = '/bit-mesra-logo.png?v=4';
+            }}
+          />
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center justify-between gap-2">
+              <h4 className="text-sm font-bold text-white truncate">{foregroundAlert.title}</h4>
+              <button
+                onClick={() => setForegroundAlert(null)}
+                className="text-slate-400 hover:text-white text-xs p-1"
+              >
+                ✕
+              </button>
+            </div>
+            <p className="text-xs text-slate-300 mt-1 line-clamp-2">{foregroundAlert.body}</p>
+          </div>
+        </div>
+      )}
+      {(activeProfile.role === 'admin' || activeProfile.role === 'push_admin') ? (
+        <AdminDashboard profile={activeProfile} />
+      ) : (
+        <StudentDashboard profile={activeProfile} />
+      )}
+    </>
+  );
 }
 

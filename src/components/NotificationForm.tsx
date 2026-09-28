@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../lib/firebase';
-import { collection, addDoc, serverTimestamp, doc, updateDoc, getDoc } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, doc, updateDoc, getDoc, getDocs } from 'firebase/firestore';
 import { Send, Clock, Target, AlertCircle, Paperclip, Upload, FileText, X, FileEdit } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useBranding } from '../context/BrandingContext';
@@ -101,14 +101,35 @@ export function NotificationForm({ onSuccess, editingId }: { onSuccess: () => vo
       // Trigger push notification via backend if status is 'sent'
       if (status === 'sent') {
         try {
+          // Query active device tokens directly from client using authenticated SDK
+          let targetTokens: string[] = [];
+          try {
+            const tokensSnap = await getDocs(collection(db, 'fcmTokens'));
+            tokensSnap.forEach(docSnap => {
+              const data = docSnap.data();
+              if (data && data.token && typeof data.token === 'string') {
+                const deptMatch = !targetDept || targetDept === 'All' || !data.department || data.department === 'All' || String(data.department).toLowerCase() === targetDept.toLowerCase();
+                const courseMatch = !targetCourse || targetCourse === 'All' || !data.course || data.course === 'All' || String(data.course).toLowerCase() === targetCourse.toLowerCase();
+                const yearMatch = !targetYear || targetYear === 'All' || !data.academicYear || data.academicYear === 'All' || String(data.academicYear).toLowerCase() === targetYear.toLowerCase();
+                if (deptMatch && courseMatch && yearMatch) {
+                  targetTokens.push(data.token);
+                }
+              }
+            });
+            targetTokens = [...new Set(targetTokens)];
+          } catch (tErr) {
+            console.warn('[NotificationForm] Client token query warning:', tErr);
+          }
+
           const pushRes = await fetch('/api/broadcast', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               title,
               body,
-              icon: branding.logoUrl || '/bit-mesra-logo.png',
-              badge: branding.logoUrl || '/bit-mesra-logo.png',
+              tokens: targetTokens,
+              icon: branding.logoUrl || '/bit-mesra-logo.png?v=4',
+              badge: branding.logoUrl || '/bit-mesra-logo.png?v=4',
               targetGroup: {
                 department: targetDept,
                 academicYear: targetYear,
@@ -118,6 +139,17 @@ export function NotificationForm({ onSuccess, editingId }: { onSuccess: () => vo
           });
           const pushData = await pushRes.json();
           console.log('[NotificationForm] Push broadcast response:', pushData);
+
+          if (pushRes.ok) {
+            const count = pushData.sentCount || 0;
+            const mob = pushData.mobileCount || 0;
+            const desk = pushData.desktopCount || 0;
+            if (count > 0) {
+              alert(`Broadcast Dispatched!\n\nPush notification sent to ${count} device(s) across campus:\n📱 Mobile: ${mob}\n💻 Desktop: ${desk}`);
+            } else {
+              alert(`Broadcast saved, but 0 devices were targeted for "${targetDept} / ${targetCourse}".\n\nPlease ensure students/staff have enabled push notifications on their phones.`);
+            }
+          }
         } catch (pushErr) {
           console.error('Failed to trigger push notification:', pushErr);
         }
@@ -300,14 +332,29 @@ export function NotificationForm({ onSuccess, editingId }: { onSuccess: () => vo
             type="button"
             onClick={async () => {
               try {
+                let allTokens: string[] = [];
+                try {
+                  const snap = await getDocs(collection(db, 'fcmTokens'));
+                  snap.forEach(d => {
+                    const data = d.data();
+                    if (data && data.token && typeof data.token === 'string') {
+                      allTokens.push(data.token);
+                    }
+                  });
+                  allTokens = [...new Set(allTokens)];
+                } catch (tokErr) {
+                  console.warn('Could not query tokens for test:', tokErr);
+                }
+
                 const res = await fetch('/api/broadcast', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ 
                     title: `${branding.institutionName || 'BIT Mesra'} Test Alert`, 
-                    body: `Sent at ${new Date().toLocaleTimeString()}. Push notification delivery with official BIT Mesra emblem is working!`,
-                    icon: branding.logoUrl || '/bit-mesra-logo.png',
-                    badge: branding.logoUrl || '/bit-mesra-logo.png',
+                    body: `Sent at ${new Date().toLocaleTimeString()}. Push notification delivery with official BIT Mesra emblem is active!`,
+                    tokens: allTokens,
+                    icon: branding.logoUrl || '/bit-mesra-logo.png?v=4',
+                    badge: branding.logoUrl || '/bit-mesra-logo.png?v=4',
                   })
                 });
 

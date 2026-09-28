@@ -1,12 +1,12 @@
 importScripts('https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.7.0/firebase-messaging-compat.js');
 
-const CACHE_NAME = 'edunotify-branding-v3';
+const CACHE_NAME = 'edunotify-branding-v4';
 
 // Helper to sanitize and resolve logo URL: always reject flaticon or legacy placeholders,
-// and guarantee the BIT Mesra emblem is used.
+// and guarantee the official BIT Mesra emblem is used.
 function sanitizeNotificationIcon(candidate) {
-  const fallback = self.location.origin + '/bit-mesra-logo.png?v=3';
+  const fallback = self.location.origin + '/bit-mesra-logo.png?v=4';
   if (!candidate || typeof candidate !== 'string') {
     return fallback;
   }
@@ -30,10 +30,10 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       return cache.addAll([
-        '/bit-mesra-logo.png?v=3',
-        '/logo.png?v=3',
-        '/favicon.png?v=3',
-        '/bit-mesra-banner.png?v=3'
+        '/bit-mesra-logo.png?v=4',
+        '/logo.png?v=4',
+        '/favicon.png?v=4',
+        '/bit-mesra-banner.png?v=4'
       ]);
     }).catch((err) => {
       console.warn('Asset pre-caching skipped:', err);
@@ -41,7 +41,7 @@ self.addEventListener('install', (event) => {
   );
 });
 
-// Purge any and all obsolete caches on activation
+// Purge any and all obsolete caches on activation and claim clients
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((cacheNames) => {
@@ -81,66 +81,84 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
-// Handle background messages with rich mobile support and BIT Mesra / uploaded institutional logo
-messaging.onBackgroundMessage((payload) => {
-  console.log('[firebase-messaging-sw.js] Received background message:', payload);
-  const notificationTitle = payload?.notification?.title || payload?.data?.title || 'BIT Mesra Campus Alert';
-  
-  // Guarantee official BIT Mesra emblem or active uploaded logo (reject any flaticon)
-  const rawIcon = payload?.notification?.icon || payload?.data?.icon;
-  const rawBadge = payload?.notification?.badge || payload?.data?.badge;
-  const notificationIcon = sanitizeNotificationIcon(rawIcon);
-  const notificationBadge = sanitizeNotificationIcon(rawBadge);
+// Primary Push Notification Event Listener (W3C standard - 100% reliable on mobile Chrome, Android & iOS PWA)
+self.addEventListener('push', (event) => {
+  console.log('[SW] Push event received on device:', event);
+  if (!event.data) return;
 
-  const notificationOptions = {
-    body: payload?.notification?.body || payload?.data?.body || 'New announcement available.',
-    icon: notificationIcon,
-    badge: notificationBadge,
-    image: payload?.notification?.image || payload?.data?.image || undefined,
-    // Mobile specific haptics & presentation
-    vibrate: [200, 100, 200, 100, 200],
-    renotify: true,
-    requireInteraction: true,
-    tag: payload?.data?.tag || ('campus-alert-' + (payload?.data?.timestamp || Date.now())),
-    silent: false,
-    data: {
-      url: payload?.fcmOptions?.link || payload?.data?.url || '/',
-      icon: notificationIcon
-    }
-  };
+  event.waitUntil(
+    (async () => {
+      try {
+        let payload = null;
+        try {
+          payload = event.data.json();
+        } catch {
+          payload = { notification: { title: 'BIT Mesra Alert', body: event.data.text() } };
+        }
 
-  self.registration.showNotification(notificationTitle, notificationOptions);
+        console.log('[SW] Push payload parsed:', payload);
+
+        const title = payload?.notification?.title 
+          || payload?.data?.title 
+          || 'BIT Mesra Campus Alert';
+
+        const body = payload?.notification?.body 
+          || payload?.data?.body 
+          || 'New campus update is available.';
+
+        const rawIcon = payload?.notification?.icon || payload?.data?.icon;
+        const rawBadge = payload?.notification?.badge || payload?.data?.badge;
+        const icon = sanitizeNotificationIcon(rawIcon);
+        const badge = sanitizeNotificationIcon(rawBadge);
+        const image = payload?.notification?.image || payload?.data?.image || undefined;
+        const tag = payload?.data?.tag || ('campus-alert-' + Date.now());
+        const targetUrl = payload?.fcmOptions?.link || payload?.data?.url || '/';
+
+        const options = {
+          body: body,
+          icon: icon,
+          badge: badge,
+          image: image,
+          vibrate: [200, 100, 200, 100, 200], // Haptic vibration on mobile
+          tag: tag,
+          renotify: true,
+          silent: false,
+          data: {
+            url: targetUrl,
+            icon: icon,
+            timestamp: Date.now()
+          }
+        };
+
+        await self.registration.showNotification(title, options);
+        console.log('[SW] Notification successfully displayed on mobile/desktop:', title);
+      } catch (err) {
+        console.error('[SW] Error showing push notification:', err);
+      }
+    })()
+  );
 });
 
-// Fallback listener for raw push events on mobile browsers
-self.addEventListener('push', (event) => {
-  if (!event.data) return;
-  try {
-    const rawData = event.data.json();
-    // If the message does not have a top-level notification object (e.g. data-only push on mobile)
-    if (rawData && !rawData.notification && rawData.data) {
-      const title = rawData.data.title || 'BIT Mesra Campus Alert';
-      const notificationIcon = sanitizeNotificationIcon(rawData.data.icon);
-      const notificationBadge = sanitizeNotificationIcon(rawData.data.badge);
-      const options = {
-        body: rawData.data.body || 'New campus update.',
-        icon: notificationIcon,
-        badge: notificationBadge,
-        image: rawData.data.image || undefined,
-        vibrate: [200, 100, 200, 100, 200],
-        renotify: true,
-        requireInteraction: true,
-        tag: rawData.data.tag || ('campus-alert-' + Date.now()),
-        data: { 
-          url: rawData.data.url || '/',
-          icon: notificationIcon
-        }
-      };
-      event.waitUntil(self.registration.showNotification(title, options));
+// Background message fallback for FCM JS SDK compat
+messaging.onBackgroundMessage((payload) => {
+  console.log('[SW] FCM onBackgroundMessage callback triggered:', payload);
+  const title = payload?.notification?.title || payload?.data?.title || 'BIT Mesra Campus Alert';
+  const icon = sanitizeNotificationIcon(payload?.notification?.icon || payload?.data?.icon);
+  const badge = sanitizeNotificationIcon(payload?.notification?.badge || payload?.data?.badge);
+
+  self.registration.showNotification(title, {
+    body: payload?.notification?.body || payload?.data?.body || 'New announcement available.',
+    icon: icon,
+    badge: badge,
+    image: payload?.notification?.image || payload?.data?.image || undefined,
+    vibrate: [200, 100, 200, 100, 200],
+    renotify: true,
+    tag: payload?.data?.tag || ('campus-alert-' + Date.now()),
+    data: {
+      url: payload?.fcmOptions?.link || payload?.data?.url || '/',
+      icon: icon
     }
-  } catch (e) {
-    // If not JSON or already handled, continue silently
-  }
+  });
 });
 
 // Click action handling for desktop and mobile devices

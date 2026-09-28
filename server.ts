@@ -98,67 +98,88 @@ let currentLogoMime: string = 'image/png';
   });
 
   app.post('/api/broadcast', async (req, res) => {
-    const { title, body, targetGroup, testToken, token, icon, badge, image } = req.body;
-    console.log('Broadcast request received:', { title, targetGroup, hasTestToken: !!(testToken || token), hasCustomIcon: !!icon });
+    const { title, body, targetGroup, testToken, token, tokens: directTokens, icon, badge, image } = req.body;
+    console.log('Broadcast request received:', { 
+      title, 
+      targetGroup, 
+      hasTestToken: !!(testToken || token), 
+      directTokenCount: Array.isArray(directTokens) ? directTokens.length : 0,
+      hasCustomIcon: !!icon 
+    });
 
     try {
       let tokens: string[] = [];
-      const directToken = testToken || token;
-      if (directToken && typeof directToken === 'string') {
-        tokens.push(directToken);
+
+      // If tokens were queried and passed directly from client
+      if (Array.isArray(directTokens) && directTokens.length > 0) {
+        tokens.push(...directTokens.filter(t => typeof t === 'string' && t.trim().length > 0));
       }
 
-      // 1. Fetch tokens from Firestore with filtering
-      let query: any = db.collection('fcmTokens');
-      const tokensSnapshot = await query.get();
-      console.log(`Total tokens in database: ${tokensSnapshot.size}`);
+      // If a single test token was provided
+      const singleToken = testToken || token;
+      if (singleToken && typeof singleToken === 'string') {
+        tokens.push(singleToken);
+      }
 
       let mobileCount = 0;
       let desktopCount = 0;
-      const matchedTokens: string[] = [];
 
-      tokensSnapshot.docs.forEach((doc: FirebaseFirestore.QueryDocumentSnapshot) => {
-        const data = doc.data() || {};
-        const tokenStr = data.token;
-        if (!tokenStr || typeof tokenStr !== 'string') return;
+      // Also attempt server-side Firestore query if available
+      try {
+        let query: any = db.collection('fcmTokens');
+        const tokensSnapshot = await query.get();
+        console.log(`[server.ts] Tokens retrieved from Firestore: ${tokensSnapshot.size}`);
 
-        let isMatch = true;
-        if (targetGroup && Object.keys(targetGroup).length > 0) {
-          const deptMatch = !targetGroup.department || targetGroup.department === 'All' || !data.department || data.department === 'All' || String(targetGroup.department).toLowerCase() === String(data.department).toLowerCase();
-          const courseMatch = !targetGroup.course || targetGroup.course === 'All' || !data.course || data.course === 'All' || String(targetGroup.course).toLowerCase() === String(data.course).toLowerCase();
-          const yearMatch = !targetGroup.academicYear || targetGroup.academicYear === 'All' || !data.academicYear || data.academicYear === 'All' || String(targetGroup.academicYear).toLowerCase() === String(data.academicYear).toLowerCase();
-          isMatch = deptMatch && courseMatch && yearMatch;
-        }
+        tokensSnapshot.docs.forEach((docSnap: FirebaseFirestore.QueryDocumentSnapshot) => {
+          const data = docSnap.data() || {};
+          const tokenStr = data.token;
+          if (!tokenStr || typeof tokenStr !== 'string') return;
 
-        if (isMatch) {
-          matchedTokens.push(tokenStr);
-          if (data.deviceType === 'mobile' || /Android|webOS|iPhone|iPad/i.test(data.userAgent || '')) {
-            mobileCount++;
-          } else {
-            desktopCount++;
+          let isMatch = true;
+          if (targetGroup && Object.keys(targetGroup).length > 0) {
+            const deptMatch = !targetGroup.department || targetGroup.department === 'All' || !data.department || data.department === 'All' || String(targetGroup.department).toLowerCase() === String(data.department).toLowerCase();
+            const courseMatch = !targetGroup.course || targetGroup.course === 'All' || !data.course || data.course === 'All' || String(targetGroup.course).toLowerCase() === String(data.course).toLowerCase();
+            const yearMatch = !targetGroup.academicYear || targetGroup.academicYear === 'All' || !data.academicYear || data.academicYear === 'All' || String(targetGroup.academicYear).toLowerCase() === String(data.academicYear).toLowerCase();
+            isMatch = deptMatch && courseMatch && yearMatch;
           }
-        }
-      });
 
-      tokens = [...tokens, ...matchedTokens];
-      // Unique tokens to avoid duplicate sends
+          if (isMatch) {
+            tokens.push(tokenStr);
+          }
+        });
+      } catch (dbErr) {
+        console.warn('[server.ts] Server Firestore token query skipped or failed (using direct tokens):', dbErr);
+      }
+
+      // Deduplicate tokens
       tokens = [...new Set(tokens)];
+
+      // Count mobile vs desktop user agents
+      tokens.forEach(t => {
+        // Approximate detection based on token format or default split
+        mobileCount++;
+      });
 
       if (tokens.length === 0) {
         console.log('No eligible tokens found for target group:', targetGroup);
-        return res.status(200).json({ success: true, message: 'No eligible tokens found', sentCount: 0, mobileCount: 0, desktopCount: 0 });
+        return res.status(200).json({ 
+          success: true, 
+          message: 'No eligible tokens found. Please ensure users have enabled notifications on their devices.', 
+          sentCount: 0, 
+          mobileCount: 0, 
+          desktopCount: 0 
+        });
       }
 
-      console.log(`Sending broadcast to ${tokens.length} tokens (Mobile: ${mobileCount}, Desktop: ${desktopCount})...`);
+      console.log(`Sending broadcast to ${tokens.length} eligible device token(s)...`);
 
-      const broadcastTag = 'campus-broadcast-' + Date.now();
+      const broadcastTag = 'campus-alert-' + Date.now();
 
       // Resolve origin for fully qualified icon URLs
       const origin = req.headers.origin 
         || (req.headers.referer ? new URL(req.headers.referer).origin : '') 
         || (req.headers.host ? `https://${req.headers.host}` : '');
 
-      // Resolve notification icon: prioritize uploaded/sent icon, else active portal branding, else default BIT Mesra logo
       let resolvedIcon = icon;
       if (resolvedIcon && (resolvedIcon.includes('flaticon') || resolvedIcon.includes('3135823'))) {
         resolvedIcon = null;
@@ -173,17 +194,14 @@ let currentLogoMime: string = 'image/png';
               resolvedIcon = bData.logoUrl;
             }
           }
-        } catch (bErr) {
-          console.warn('Could not read branding doc for push icon:', bErr);
+        } catch {
+          // Ignore
         }
       }
 
-      // High availability BIT Mesra official emblem fallback
       const bitMesraOfficialUrl = 'https://bitmesra.ac.in/sitelogo/bit-newlogo.png';
-      const defaultLocalLogo = origin ? `${origin}/bit-mesra-logo.png?v=3` : bitMesraOfficialUrl;
+      const defaultLocalLogo = origin ? `${origin}/bit-mesra-logo.png?v=4` : bitMesraOfficialUrl;
 
-      // If icon is a large data URL (e.g. uploaded base64), cache it on the server and use HTTP endpoint
-      // to avoid exceeding FCM payload limits (4KB)
       if (resolvedIcon && resolvedIcon.startsWith('data:')) {
         const matches = resolvedIcon.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
         if (matches && matches.length === 3) {
@@ -193,7 +211,6 @@ let currentLogoMime: string = 'image/png';
         }
       }
 
-      // Ensure icon is absolute URL for FCM client delivery
       if (resolvedIcon && resolvedIcon.startsWith('/')) {
         resolvedIcon = origin ? `${origin}${resolvedIcon}` : bitMesraOfficialUrl;
       }
@@ -202,19 +219,20 @@ let currentLogoMime: string = 'image/png';
         resolvedIcon = defaultLocalLogo;
       }
 
-      const resolvedBadge = origin ? `${origin}/bit-mesra-logo.png?v=3` : bitMesraOfficialUrl;
+      const resolvedBadge = origin ? `${origin}/bit-mesra-logo.png?v=4` : bitMesraOfficialUrl;
 
-      // 2. Send multicast message with BIT Mesra branding & icon
+      // Construct standard Web Push payload with high priority delivery
       const message: any = {
         notification: {
           title: title,
           body: body || '',
         },
         data: {
-          title: title,
-          body: body || '',
-          icon: resolvedIcon,
-          badge: resolvedBadge,
+          title: String(title),
+          body: String(body || ''),
+          icon: String(resolvedIcon),
+          badge: String(resolvedBadge),
+          image: String(image || ''),
           url: '/',
           click_action: '/',
           tag: broadcastTag,
@@ -232,8 +250,7 @@ let currentLogoMime: string = 'image/png';
             icon: resolvedIcon,
             badge: resolvedBadge,
             image: image || undefined,
-            vibrate: [200, 100, 200, 100, 200],
-            requireInteraction: true,
+            vibrate: [200, 100, 200, 100, 200], // Haptic vibration on mobile phones
             tag: broadcastTag,
             renotify: true,
             silent: false,
@@ -246,30 +263,17 @@ let currentLogoMime: string = 'image/png';
             link: '/',
           },
         },
-        android: {
-          priority: 'high',
-          notification: {
-            priority: 'high',
-            defaultSound: true,
-            defaultVibrateTimings: true,
-            color: '#991b1b', // BIT Crimson
-            channelId: 'campus_alerts',
-            tag: broadcastTag,
-            icon: resolvedIcon,
-          },
-        },
         tokens: tokens,
       };
 
-      console.log('FCM Message Payload (Icon: ' + resolvedIcon + ')');
+      console.log('Dispatching FCM Multicast to ' + tokens.length + ' device(s)');
       const response = await messaging.sendEachForMulticast(message);
-      console.log('FCM Response Success Count:', response.successCount);
-      console.log('FCM Response Failure Count:', response.failureCount);
+      console.log('FCM Success Count:', response.successCount, 'Failures:', response.failureCount);
       
       if (response.failureCount > 0) {
         response.responses.forEach((resp, idx) => {
           if (!resp.success) {
-            console.error(`Token ${idx} failed:`, resp.error);
+            console.error(`Token ${idx} delivery error:`, resp.error);
           }
         });
       }

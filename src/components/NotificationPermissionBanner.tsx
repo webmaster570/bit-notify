@@ -120,8 +120,9 @@ export function NotificationPermissionBanner({ compact = false, isAdmin = false 
         body: JSON.stringify({
           title: `${branding.institutionName || 'BIT Mesra'} Broadcast Test`,
           body: `Verification alert received at ${new Date().toLocaleTimeString()} on ${isMobile ? 'Mobile' : 'Desktop'}!`,
-          icon: branding.logoUrl || '/bit-mesra-logo.png',
-          badge: branding.logoUrl || '/bit-mesra-logo.png',
+          icon: branding.logoUrl || '/bit-mesra-logo.png?v=4',
+          badge: branding.logoUrl || '/bit-mesra-logo.png?v=4',
+          tokens: fullToken ? [fullToken] : [],
           testToken: fullToken || undefined,
         }),
       });
@@ -328,17 +329,17 @@ export function NotificationPermissionBanner({ compact = false, isAdmin = false 
           </div>
         )}
 
-        {isAdmin && (
+        {(isAdmin || isMobile || fullToken) && (
           <div className="flex items-center justify-between pt-2 border-t border-emerald-100">
             <span className="text-[11px] text-slate-500">
-              {testStatus ? <strong className="text-blue-600">{testStatus}</strong> : `Test delivery on this ${isMobile ? 'phone' : 'computer'}:`}
+              {testStatus ? <strong className="text-blue-600">{testStatus}</strong> : `Test push delivery on this ${isMobile ? 'phone' : 'computer'}:`}
             </span>
             <button
               onClick={handleSendTestPush}
               className="px-3 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 transition-all flex items-center gap-1.5 shadow-sm"
             >
               <Bell className="h-3.5 w-3.5" />
-              <span>Send Quick Test</span>
+              <span>{isMobile ? 'Test This Phone' : 'Send Quick Test'}</span>
             </button>
           </div>
         )}

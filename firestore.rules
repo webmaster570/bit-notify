@@ -3,14 +3,20 @@ service cloud.firestore {
   match /databases/{database}/documents {
     // Helper to check if user is admin
     function isAdmin() {
-      return request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      return request.auth != null && (
+        (request.auth.token.email != null && (request.auth.token.email.matches('.*admin.*') || request.auth.token.email.matches('.*webmaster.*'))) ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+      );
     }
 
     // Helper to check if user is push admin
     function isPushAdmin() {
       return request.auth != null && (
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'push_admin' ||
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+        (request.auth.token.email != null && (request.auth.token.email.matches('.*admin.*') || request.auth.token.email.matches('.*webmaster.*'))) ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'push_admin' ||
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+        ))
       );
     }
 

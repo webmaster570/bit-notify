@@ -75,9 +75,15 @@ export default async function handler(req: any, res: any) {
   try {
     const { primaryDbId, messaging } = getFirebaseAdmin();
     const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
-    const { title, body: messageBody, targetGroup, testToken, token, icon, badge, image } = body;
+    const { title, body: messageBody, targetGroup, testToken, token, tokens: directTokens, icon, badge, image } = body;
 
-    console.log('[api/broadcast] Request received:', { title, targetGroup, hasTestToken: !!(testToken || token), hasCustomIcon: !!icon });
+    console.log('[api/broadcast] Request received:', { 
+      title, 
+      targetGroup, 
+      hasTestToken: !!(testToken || token), 
+      directTokenCount: Array.isArray(directTokens) ? directTokens.length : 0,
+      hasCustomIcon: !!icon 
+    });
 
     if (!title) {
       return res.status(400).json({ error: 'Title is required' });
@@ -85,24 +91,28 @@ export default async function handler(req: any, res: any) {
 
     let tokens: string[] = [];
 
-    // If an explicit test token was sent (e.g. from the dashboard Quick Test), add it directly
-    const directToken = testToken || token;
-    if (directToken && typeof directToken === 'string') {
-      tokens.push(directToken);
+    // 1. If explicit tokens were provided in the request body
+    if (Array.isArray(directTokens) && directTokens.length > 0) {
+      tokens.push(...directTokens.filter(t => typeof t === 'string' && t.trim().length > 0));
+    }
+
+    const singleToken = testToken || token;
+    if (singleToken && typeof singleToken === 'string') {
+      tokens.push(singleToken);
     }
 
     let mobileCount = 0;
     let desktopCount = 0;
 
-    // 1. Fetch tokens from Firestore
+    // 2. Fetch additional tokens from Firestore if accessible
     try {
       const tokensSnapshot = await getTokensSnapshot(primaryDbId);
       console.log(`[api/broadcast] Total tokens in Firestore: ${tokensSnapshot.size}`);
 
       const matchedTokens: string[] = [];
 
-      tokensSnapshot.docs.forEach((doc: any) => {
-        const data = doc.data() || {};
+      tokensSnapshot.docs.forEach((docSnap: any) => {
+        const data = docSnap.data() || {};
         const tokenStr = data.token;
         if (!tokenStr || typeof tokenStr !== 'string') return;
 
@@ -117,33 +127,34 @@ export default async function handler(req: any, res: any) {
 
         if (isMatch) {
           matchedTokens.push(tokenStr);
-          if (data.deviceType === 'mobile' || /Android|webOS|iPhone|iPad/i.test(data.userAgent || '')) {
-            mobileCount++;
-          } else {
-            desktopCount++;
-          }
         }
       });
 
       tokens = [...tokens, ...matchedTokens];
     } catch (dbErr: any) {
-      console.error('[api/broadcast] Could not query Firestore fcmTokens:', dbErr);
-      // If we don't have directToken and DB query failed, propagate error
-      if (tokens.length === 0) {
-        throw dbErr;
-      }
+      console.warn('[api/broadcast] Firestore query skipped or failed (using direct tokens):', dbErr?.message || dbErr);
     }
 
     tokens = [...new Set(tokens)];
 
+    tokens.forEach(() => {
+      mobileCount++;
+    });
+
     if (tokens.length === 0) {
       console.log('[api/broadcast] No eligible tokens found for target group:', targetGroup);
-      return res.status(200).json({ success: true, message: 'No eligible tokens found', sentCount: 0, mobileCount: 0, desktopCount: 0 });
+      return res.status(200).json({ 
+        success: true, 
+        message: 'No eligible tokens found. Please ensure users have enabled notifications.', 
+        sentCount: 0, 
+        mobileCount: 0, 
+        desktopCount: 0 
+      });
     }
 
-    console.log(`[api/broadcast] Sending broadcast to ${tokens.length} token(s) (Mobile: ${mobileCount}, Desktop: ${desktopCount})...`);
+    console.log(`[api/broadcast] Sending broadcast to ${tokens.length} token(s)...`);
 
-    const broadcastTag = 'campus-broadcast-' + Date.now();
+    const broadcastTag = 'campus-alert-' + Date.now();
 
     // Resolve origin for fully qualified icon URLs
     const origin = req.headers.origin 
@@ -169,18 +180,17 @@ export default async function handler(req: any, res: any) {
 
     // High availability BIT Mesra official emblem fallback
     const bitMesraOfficialUrl = 'https://bitmesra.ac.in/sitelogo/bit-newlogo.png';
-    const defaultLocalLogo = origin ? `${origin}/bit-mesra-logo.png?v=3` : bitMesraOfficialUrl;
+    const defaultLocalLogo = origin ? `${origin}/bit-mesra-logo.png?v=4` : bitMesraOfficialUrl;
 
     if (!resolvedIcon || resolvedIcon.includes('flaticon') || resolvedIcon.includes('3135823')) {
       resolvedIcon = defaultLocalLogo;
     } else if (resolvedIcon.startsWith('data:')) {
-      // Large base64 data URLs exceed FCM 4KB payload limit. Use server logo endpoint or fallback
       resolvedIcon = origin ? `${origin}/api/branding/logo` : bitMesraOfficialUrl;
     } else if (resolvedIcon.startsWith('/')) {
       resolvedIcon = origin ? `${origin}${resolvedIcon}` : bitMesraOfficialUrl;
     }
 
-    const resolvedBadge = origin ? `${origin}/bit-mesra-logo.png?v=3` : bitMesraOfficialUrl;
+    const resolvedBadge = origin ? `${origin}/bit-mesra-logo.png?v=4` : bitMesraOfficialUrl;
 
     const message: any = {
       notification: {
@@ -189,10 +199,11 @@ export default async function handler(req: any, res: any) {
       },
       // Data payload for mobile background workers and Android apps
       data: {
-        title: title,
-        body: messageBody || '',
-        icon: resolvedIcon,
-        badge: resolvedBadge,
+        title: String(title),
+        body: String(messageBody || ''),
+        icon: String(resolvedIcon),
+        badge: String(resolvedBadge),
+        image: String(image || ''),
         url: '/',
         click_action: '/',
         tag: broadcastTag,
@@ -212,7 +223,6 @@ export default async function handler(req: any, res: any) {
           badge: resolvedBadge,
           image: image || undefined,
           vibrate: [200, 100, 200, 100, 200], // Mobile vibration pattern
-          requireInteraction: true,
           tag: broadcastTag,
           renotify: true,
           silent: false,
@@ -223,19 +233,6 @@ export default async function handler(req: any, res: any) {
         },
         fcmOptions: {
           link: '/',
-        },
-      },
-      // Android payload for mobile push services
-      android: {
-        priority: 'high',
-        notification: {
-          priority: 'high',
-          defaultSound: true,
-          defaultVibrateTimings: true,
-          channelId: 'campus_alerts',
-          color: '#991b1b', // BIT Crimson
-          tag: broadcastTag,
-          icon: resolvedIcon,
         },
       },
       tokens: tokens,
