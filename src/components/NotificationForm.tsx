@@ -3,8 +3,10 @@ import { db } from '../lib/firebase';
 import { collection, addDoc, serverTimestamp, doc, updateDoc, getDoc } from 'firebase/firestore';
 import { Send, Clock, Target, AlertCircle, Paperclip, Upload, FileText, X, FileEdit } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { useBranding } from '../context/BrandingContext';
 
 export function NotificationForm({ onSuccess, editingId }: { onSuccess: () => void, editingId?: string | null }) {
+  const { branding } = useBranding();
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [priority, setPriority] = useState<'low' | 'medium' | 'high'>('medium');
@@ -105,6 +107,8 @@ export function NotificationForm({ onSuccess, editingId }: { onSuccess: () => vo
             body: JSON.stringify({
               title,
               body,
+              icon: branding.logoUrl || '/bit-mesra-logo.png',
+              badge: branding.logoUrl || '/bit-mesra-logo.png',
               targetGroup: {
                 department: targetDept,
                 academicYear: targetYear,

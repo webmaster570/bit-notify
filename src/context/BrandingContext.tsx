@@ -128,10 +128,10 @@ export interface BrandingConfig {
 const DEFAULT_BRANDING: BrandingConfig = {
   title: 'EduNotify',
   institutionName: 'BIT Mesra',
-  tagline: 'Real-time campus broadcast & announcement network',
-  logoUrl: '',
+  tagline: 'Birla Institute of Technology, Mesra - Official Campus Broadcast Network',
+  logoUrl: '/bit-mesra-logo.png',
   presetIcon: 'graduation',
-  themeColor: 'blue',
+  themeColor: 'crimson',
   bannerAlert: 'Official campus notification service is online and active.',
   showBannerAlert: false,
 };
@@ -187,15 +187,33 @@ export function BrandingProvider({ children }: { children: React.ReactNode }) {
     return () => unsub();
   }, []);
 
-  // Sync document title and favicon
+  // Sync document title, favicon, and apple-touch-icon
   useEffect(() => {
     if (typeof document !== 'undefined') {
       const pageTitle = branding.title 
-        ? `${branding.title} | ${branding.institutionName || 'Campus Broadcasts'}`
-        : 'EduNotify | Campus Broadcasts';
+        ? `${branding.title} | ${branding.institutionName || 'BIT Mesra'}`
+        : 'EduNotify | BIT Mesra';
       document.title = pageTitle;
+
+      const activeIcon = branding.logoUrl || '/bit-mesra-logo.png';
+      
+      let linkIcon = document.querySelector<HTMLLinkElement>("link[rel~='icon']");
+      if (!linkIcon) {
+        linkIcon = document.createElement('link');
+        linkIcon.rel = 'icon';
+        document.head.appendChild(linkIcon);
+      }
+      linkIcon.href = activeIcon;
+
+      let linkApple = document.querySelector<HTMLLinkElement>("link[rel='apple-touch-icon']");
+      if (!linkApple) {
+        linkApple = document.createElement('link');
+        linkApple.rel = 'apple-touch-icon';
+        document.head.appendChild(linkApple);
+      }
+      linkApple.href = activeIcon;
     }
-  }, [branding.title, branding.institutionName]);
+  }, [branding.title, branding.institutionName, branding.logoUrl]);
 
   const updateBranding = async (newConfig: Partial<BrandingConfig>) => {
     setSaving(true);

@@ -11,9 +11,11 @@ import { StudentDashboard } from './components/StudentDashboard';
 import { Loader2 } from 'lucide-react';
 import { requestForToken, messaging } from './lib/firebase';
 import { onMessage } from 'firebase/messaging';
+import { useBranding } from './context/BrandingContext';
 
 export default function App() {
   const { user, profile, loading, error } = useAuth();
+  const { branding } = useBranding();
 
   useEffect(() => {
     if (user) {
@@ -52,17 +54,21 @@ export default function App() {
           
           // Show browser notification if permitted
           if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-            const title = payload.notification?.title || payload.data?.title || 'EduNotify Campus Alert';
+            const title = payload.notification?.title || payload.data?.title || `${branding.institutionName || 'BIT Mesra'} Alert`;
+            const iconUrl = payload.notification?.icon || payload.data?.icon || branding.logoUrl || '/bit-mesra-logo.png';
+            const badgeUrl = (payload.notification as any)?.badge || payload.data?.badge || '/bit-mesra-logo.png';
             const options: any = {
               body: payload.notification?.body || payload.data?.body || 'New announcement available.',
-              icon: payload.notification?.icon || 'https://cdn-icons-png.flaticon.com/512/3135/3135823.png',
-              badge: 'https://cdn-icons-png.flaticon.com/512/3135/3135823.png',
+              icon: iconUrl,
+              badge: badgeUrl,
+              image: (payload.notification as any)?.image || payload.data?.image || undefined,
               // Vibration pattern for mobile
               vibrate: [200, 100, 200, 100, 200],
               tag: payload.data?.tag || ('edu-notify-' + Date.now()),
               renotify: true,
               data: {
-                url: payload.data?.url || '/'
+                url: payload.data?.url || '/',
+                icon: iconUrl
               }
             };
             
@@ -131,7 +137,7 @@ export default function App() {
     course: 'All'
   };
 
-  if (activeProfile.role === 'admin') {
+  if (activeProfile.role === 'admin' || activeProfile.role === 'push_admin') {
     return <AdminDashboard profile={activeProfile} />;
   }
 

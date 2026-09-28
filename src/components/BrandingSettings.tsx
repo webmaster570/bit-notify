@@ -50,9 +50,19 @@ export function BrandingSettings() {
         return;
       }
       const reader = new FileReader();
-      reader.onload = (event) => {
+      reader.onload = async (event) => {
         const result = event.target?.result as string;
         setLogoUrl(result);
+        // Sync to server cache for instant push notification icon delivery
+        try {
+          await fetch('/api/branding/logo', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ dataUrl: result })
+          });
+        } catch (uploadErr) {
+          console.warn('Could not sync logo to server:', uploadErr);
+        }
       };
       reader.readAsDataURL(file);
     }
@@ -60,29 +70,43 @@ export function BrandingSettings() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    const finalLogo = logoUrl.trim() || '/bit-mesra-logo.png';
     await updateBranding({
       title: title.trim() || 'EduNotify',
-      institutionName: institutionName.trim() || 'Campus Alerts',
+      institutionName: institutionName.trim() || 'BIT Mesra',
       tagline: tagline.trim(),
-      logoUrl: logoUrl.trim(),
+      logoUrl: finalLogo,
       presetIcon,
       themeColor,
       showBannerAlert,
       bannerAlert: bannerAlert.trim(),
     });
+
+    if (finalLogo.startsWith('data:')) {
+      try {
+        await fetch('/api/branding/logo', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ dataUrl: finalLogo })
+        });
+      } catch {
+        // Ignore
+      }
+    }
+
     setSavedSuccess(true);
     setTimeout(() => setSavedSuccess(false), 3000);
   };
 
   const handleReset = async () => {
-    if (confirm('Reset branding and design theme back to factory defaults?')) {
+    if (confirm('Reset branding and design theme back to official BIT Mesra defaults?')) {
       await resetBranding();
       setTitle('EduNotify');
       setInstitutionName('BIT Mesra');
-      setTagline('Real-time campus broadcast & announcement network');
-      setLogoUrl('');
+      setTagline('Birla Institute of Technology, Mesra - Official Campus Broadcast Network');
+      setLogoUrl('/bit-mesra-logo.png');
       setPresetIcon('graduation');
-      setThemeColor('blue');
+      setThemeColor('crimson');
       setShowBannerAlert(false);
       setBannerAlert('Official campus notification service is online and active.');
       setSavedSuccess(true);
@@ -207,11 +231,27 @@ export function BrandingSettings() {
               <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Logo &amp; Brand Icon</h3>
             </div>
 
-            {/* Preset Icon Choice */}
+            {/* Preset Icon Choice & Official BIT Mesra Emblem */}
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-2">
-                Option A: Choose a Built-in Educational Seal Icon
-              </label>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-xs font-semibold text-slate-700">
+                  Option A: Choose Institutional Seal or Official Emblem
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setLogoUrl('/bit-mesra-logo.png')}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all border",
+                    (logoUrl === '/bit-mesra-logo.png' || (!logoUrl && branding.logoUrl === '/bit-mesra-logo.png'))
+                      ? "bg-red-50 text-red-700 border-red-200 ring-2 ring-red-500/20"
+                      : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
+                  )}
+                >
+                  <img src="/bit-mesra-logo.png" alt="BIT Mesra" className="h-4 w-4 object-contain" />
+                  <span>Use Official BIT Mesra Logo</span>
+                </button>
+              </div>
+
               <div className="grid grid-cols-3 sm:grid-cols-6 gap-2.5">
                 {presetIcons.map((item) => {
                   const Icon = item.icon;
@@ -268,16 +308,35 @@ export function BrandingSettings() {
                   {logoUrl && (
                     <button
                       type="button"
-                      onClick={() => setLogoUrl('')}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400 hover:text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded"
+                      onClick={() => setLogoUrl('/bit-mesra-logo.png')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-500 hover:text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200"
                     >
-                      Clear
+                      Reset to BIT
                     </button>
                   )}
                 </div>
               </div>
+
+              {/* Notification icon indicator */}
+              <div className="flex items-center gap-2.5 p-3 rounded-xl bg-amber-50/60 border border-amber-200/60 text-amber-900 text-xs">
+                <img
+                  src={logoUrl || '/bit-mesra-logo.png'}
+                  alt="Notification Icon Preview"
+                  className="h-7 w-7 object-contain rounded-md bg-white border border-amber-200 shadow-2xs"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src = '/bit-mesra-logo.png';
+                  }}
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="font-bold text-[11px] text-amber-950">Active Push Notification Icon</p>
+                  <p className="text-[10px] text-amber-800">
+                    This exact logo is attached to all push notifications and displayed in students&apos; &amp; staff&apos;s notification trays on Android, iOS, Windows, and macOS.
+                  </p>
+                </div>
+              </div>
+
               <p className="text-[11px] text-slate-400">
-                Recommended: Square or horizontal badge with transparent background.
+                Recommended: Square or badge with transparent background.
               </p>
             </div>
           </div>

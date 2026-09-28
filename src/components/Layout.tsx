@@ -32,15 +32,19 @@ export function Layout({ children, profile, activeTab, setActiveTab }: LayoutPro
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
   const { branding, theme } = useBranding();
 
+  const isSuperAdmin = profile?.role === 'admin';
+  const isPushAdmin = profile?.role === 'push_admin';
+  const canBroadcast = isSuperAdmin || isPushAdmin;
+
   const menuItems = [
-    { id: 'dashboard', label: 'Overview', icon: BarChart2 },
-    { id: 'broadcast', label: 'Broadcast', icon: Send, adminOnly: true },
-    { id: 'notifications', label: 'History', icon: Bell },
-    { id: 'users', label: 'Students & Staff', icon: Users, adminOnly: true },
-    { id: 'branding', label: 'Branding & Design', icon: Palette, adminOnly: true },
+    { id: 'dashboard', label: 'Overview', icon: BarChart2, visible: true },
+    { id: 'broadcast', label: 'Broadcast', icon: Send, visible: canBroadcast },
+    { id: 'notifications', label: 'History', icon: Bell, visible: true },
+    { id: 'users', label: 'Students & Staff', icon: Users, visible: isSuperAdmin },
+    { id: 'branding', label: 'Branding & Design', icon: Palette, visible: isSuperAdmin },
   ];
 
-  const filteredMenu = menuItems.filter(item => !item.adminOnly || profile?.role === 'admin');
+  const filteredMenu = menuItems.filter(item => item.visible);
 
   // Render chosen branding icon or custom image
   const renderLogoIcon = (sizeClass: string = "h-5 w-5") => {
@@ -131,7 +135,9 @@ export function Layout({ children, profile, activeTab, setActiveTab }: LayoutPro
                 <p className="text-xs font-bold text-slate-900 truncate">{profile?.name}</p>
                 <p className="text-[10px] text-slate-500 truncate capitalize">
                   {profile?.department && profile.department !== 'All' ? `${profile.department} · ` : ''}
-                  {profile?.role}
+                  <span className="capitalize">
+                    {profile?.role === 'push_admin' ? 'Push Admin' : profile?.role === 'admin' ? 'Super Admin' : profile?.role}
+                  </span>
                 </p>
               </div>
             </div>

@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { Bell, AlertTriangle, ExternalLink, RefreshCw, CheckCircle2, ShieldAlert, Smartphone, Monitor, Share, PlusSquare } from 'lucide-react';
 import { requestForToken, auth, db, getDeviceId, getDeviceType } from '../lib/firebase';
 import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { useBranding } from '../context/BrandingContext';
 
 export function NotificationPermissionBanner({ compact = false, isAdmin = false }: { compact?: boolean; isAdmin?: boolean }) {
+  const { branding } = useBranding();
   const [permission, setPermission] = useState<NotificationPermission | 'unsupported'>('default');
   const [isIframe, setIsIframe] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
@@ -116,8 +118,10 @@ export function NotificationPermissionBanner({ compact = false, isAdmin = false 
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          title: 'EduNotify Broadcast Test',
+          title: `${branding.institutionName || 'BIT Mesra'} Broadcast Test`,
           body: `Verification alert received at ${new Date().toLocaleTimeString()} on ${isMobile ? 'Mobile' : 'Desktop'}!`,
+          icon: branding.logoUrl || '/bit-mesra-logo.png',
+          badge: branding.logoUrl || '/bit-mesra-logo.png',
           testToken: fullToken || undefined,
         }),
       });

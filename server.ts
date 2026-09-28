@@ -45,13 +45,53 @@ const messaging = getMessaging();
 
 console.log(`Firestore initialized with projectId: ${getApps()[0].options.projectId}, databaseId: ${databaseId}`);
 
+let currentLogoBase64: string | null = null;
+let currentLogoMime: string = 'image/png';
+
   app.get('/health', (req, res) => {
     res.status(200).send('OK');
   });
 
+  // Serve current branding logo (supports uploaded custom image or BIT Mesra official emblem)
+  app.get('/api/branding/logo', (req, res) => {
+    if (currentLogoBase64) {
+      try {
+        const imgBuffer = Buffer.from(currentLogoBase64, 'base64');
+        res.writeHead(200, {
+          'Content-Type': currentLogoMime,
+          'Content-Length': imgBuffer.length,
+          'Cache-Control': 'public, max-age=86400',
+        });
+        return res.end(imgBuffer);
+      } catch (e) {
+        console.warn('Failed to serve cached base64 logo:', e);
+      }
+    }
+    const defaultLogoPath = path.join(__dirname, 'public', 'bit-mesra-logo.png');
+    res.sendFile(defaultLogoPath, (err) => {
+      if (err) {
+        res.redirect('https://bitmesra.ac.in/sitelogo/bit-newlogo.png');
+      }
+    });
+  });
+
+  // Sync uploaded logo to server memory/cache to keep FCM payload lightweight
+  app.post('/api/branding/logo', (req, res) => {
+    const { dataUrl } = req.body;
+    if (dataUrl && typeof dataUrl === 'string' && dataUrl.startsWith('data:')) {
+      const matches = dataUrl.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+      if (matches && matches.length === 3) {
+        currentLogoMime = matches[1];
+        currentLogoBase64 = matches[2];
+        return res.json({ success: true, url: '/api/branding/logo' });
+      }
+    }
+    return res.json({ success: true, url: '/bit-mesra-logo.png' });
+  });
+
   app.post('/api/broadcast', async (req, res) => {
-    const { title, body, targetGroup, testToken, token } = req.body;
-    console.log('Broadcast request received:', { title, targetGroup, hasTestToken: !!(testToken || token) });
+    const { title, body, targetGroup, testToken, token, icon, badge, image } = req.body;
+    console.log('Broadcast request received:', { title, targetGroup, hasTestToken: !!(testToken || token), hasCustomIcon: !!icon });
 
     try {
       let tokens: string[] = [];
@@ -105,7 +145,50 @@ console.log(`Firestore initialized with projectId: ${getApps()[0].options.projec
 
       const broadcastTag = 'campus-broadcast-' + Date.now();
 
-      // 2. Send multicast message with enhanced config for mobile and web
+      // Resolve origin for fully qualified icon URLs
+      const origin = req.headers.origin 
+        || (req.headers.referer ? new URL(req.headers.referer).origin : '') 
+        || (req.headers.host ? `https://${req.headers.host}` : '');
+
+      // Resolve notification icon: prioritize uploaded/sent icon, else active portal branding, else default BIT Mesra logo
+      let resolvedIcon = icon;
+      if (!resolvedIcon) {
+        try {
+          const brandingDoc = await db.collection('settings').doc('branding').get();
+          if (brandingDoc.exists) {
+            const bData = brandingDoc.data();
+            if (bData && bData.logoUrl) {
+              resolvedIcon = bData.logoUrl;
+            }
+          }
+        } catch (bErr) {
+          console.warn('Could not read branding doc for push icon:', bErr);
+        }
+      }
+
+      // If icon is a large data URL (e.g. uploaded base64), cache it on the server and use HTTP endpoint
+      // to avoid exceeding FCM payload limits (4KB)
+      if (resolvedIcon && resolvedIcon.startsWith('data:')) {
+        const matches = resolvedIcon.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+        if (matches && matches.length === 3) {
+          currentLogoMime = matches[1];
+          currentLogoBase64 = matches[2];
+          resolvedIcon = origin ? `${origin}/api/branding/logo` : '/bit-mesra-logo.png';
+        }
+      }
+
+      // Ensure icon is absolute URL for FCM client delivery
+      if (resolvedIcon && resolvedIcon.startsWith('/')) {
+        resolvedIcon = origin ? `${origin}${resolvedIcon}` : 'https://bitmesra.ac.in/sitelogo/bit-newlogo.png';
+      }
+
+      if (!resolvedIcon) {
+        resolvedIcon = origin ? `${origin}/bit-mesra-logo.png` : 'https://bitmesra.ac.in/sitelogo/bit-newlogo.png';
+      }
+
+      const resolvedBadge = origin ? `${origin}/bit-mesra-logo.png` : 'https://bitmesra.ac.in/sitelogo/bit-newlogo.png';
+
+      // 2. Send multicast message with BIT Mesra branding & icon
       const message: any = {
         notification: {
           title: title,
@@ -114,6 +197,8 @@ console.log(`Firestore initialized with projectId: ${getApps()[0].options.projec
         data: {
           title: title,
           body: body || '',
+          icon: resolvedIcon,
+          badge: resolvedBadge,
           url: '/',
           click_action: '/',
           tag: broadcastTag,
@@ -128,8 +213,9 @@ console.log(`Firestore initialized with projectId: ${getApps()[0].options.projec
           notification: {
             title: title,
             body: body || '',
-            icon: 'https://cdn-icons-png.flaticon.com/512/3135/3135823.png',
-            badge: 'https://cdn-icons-png.flaticon.com/512/3135/3135823.png',
+            icon: resolvedIcon,
+            badge: resolvedBadge,
+            image: image || undefined,
             vibrate: [200, 100, 200, 100, 200],
             requireInteraction: true,
             tag: broadcastTag,
@@ -137,6 +223,7 @@ console.log(`Firestore initialized with projectId: ${getApps()[0].options.projec
             silent: false,
             data: {
               url: '/',
+              icon: resolvedIcon,
             },
           },
           fcmOptions: {
@@ -149,6 +236,7 @@ console.log(`Firestore initialized with projectId: ${getApps()[0].options.projec
             priority: 'high',
             defaultSound: true,
             defaultVibrateTimings: true,
+            color: '#991b1b', // BIT Crimson
             channelId: 'campus_alerts',
             tag: broadcastTag,
           },
@@ -156,7 +244,7 @@ console.log(`Firestore initialized with projectId: ${getApps()[0].options.projec
         tokens: tokens,
       };
 
-      console.log('FCM Message Payload:', JSON.stringify(message, null, 2));
+      console.log('FCM Message Payload (Icon: ' + resolvedIcon + ')');
       const response = await messaging.sendEachForMulticast(message);
       console.log('FCM Response Success Count:', response.successCount);
       console.log('FCM Response Failure Count:', response.failureCount);
@@ -176,6 +264,7 @@ console.log(`Firestore initialized with projectId: ${getApps()[0].options.projec
         totalTokens: tokens.length,
         mobileCount,
         desktopCount,
+        icon: resolvedIcon,
       });
     } catch (error) {
       console.error('Critical Error in /api/broadcast:', error);

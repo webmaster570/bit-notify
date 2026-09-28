@@ -6,24 +6,33 @@ service cloud.firestore {
       return request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
 
+    // Helper to check if user is push admin
+    function isPushAdmin() {
+      return request.auth != null && (
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'push_admin' ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+      );
+    }
+
     // Helper to check if user is faculty
     function isFaculty() {
       return request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'faculty';
     }
 
     match /users/{userId} {
-      allow read: if request.auth != null && (request.auth.uid == userId || isAdmin() || isFaculty());
-      allow create: if request.auth != null && request.auth.uid == userId;
+      allow read: if request.auth != null && (request.auth.uid == userId || isAdmin() || isPushAdmin() || isFaculty());
+      allow create: if request.auth != null && (request.auth.uid == userId || isAdmin());
       allow update: if request.auth != null && (request.auth.uid == userId || isAdmin());
+      allow delete: if isAdmin();
     }
 
     match /notifications/{notificationId} {
       allow read: if request.auth != null;
-      allow write: if isAdmin() || isFaculty();
+      allow write: if isAdmin() || isPushAdmin() || isFaculty();
     }
 
     match /fcmTokens/{tokenId} {
-      allow read: if isAdmin() || (request.auth != null && (request.auth.uid == tokenId || resource.data.uid == request.auth.uid));
+      allow read: if isAdmin() || isPushAdmin() || (request.auth != null && (request.auth.uid == tokenId || resource.data.uid == request.auth.uid));
       allow write: if request.auth != null && (request.auth.uid == tokenId || request.resource.data.uid == request.auth.uid);
       allow delete: if request.auth != null && (request.auth.uid == tokenId || resource.data.uid == request.auth.uid);
     }

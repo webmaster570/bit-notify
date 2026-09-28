@@ -1,21 +1,21 @@
 {
-  "name": "EduNotify - Campus Broadcasts",
+  "name": "BIT Mesra - EduNotify Broadcasts",
   "short_name": "EduNotify",
-  "description": "Real-time notification and announcement platform for educational organizations.",
+  "description": "Real-time notification and announcement platform for Birla Institute of Technology, Mesra.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
-  "theme_color": "#2563eb",
+  "theme_color": "#991b1b",
   "orientation": "portrait",
   "icons": [
     {
-      "src": "https://cdn-icons-png.flaticon.com/512/3135/3135823.png",
+      "src": "/bit-mesra-logo.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "https://cdn-icons-png.flaticon.com/512/3135/3135823.png",
+      "src": "/bit-mesra-logo.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"

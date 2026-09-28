@@ -28,7 +28,7 @@ export function UserManagement() {
   const [newUserName, setNewUserName] = useState('');
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserPassword, setNewUserPassword] = useState('');
-  const [newUserRole, setNewUserRole] = useState<'student' | 'faculty' | 'admin'>('student');
+  const [newUserRole, setNewUserRole] = useState<'student' | 'faculty' | 'admin' | 'push_admin'>('student');
   const [newUserDept, setNewUserDept] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [createError, setCreateError] = useState('');
@@ -165,7 +165,7 @@ export function UserManagement() {
             <Filter className="h-4 w-4 text-slate-400" />
             <span className="text-sm font-medium text-slate-600">Filters:</span>
             <div className="flex gap-2">
-              {['all', 'admin', 'faculty', 'student'].map(role => (
+              {['all', 'admin', 'push_admin', 'faculty', 'student'].map(role => (
                 <button
                   key={role}
                   onClick={() => setRoleFilter(role)}
@@ -176,7 +176,7 @@ export function UserManagement() {
                       : "bg-white text-slate-600 border border-slate-200 hover:border-blue-300"
                   )}
                 >
-                  {role}
+                  {role === 'push_admin' ? 'Push Admin' : role}
                 </button>
               ))}
             </div>
@@ -235,13 +235,15 @@ export function UserManagement() {
                           className={cn(
                             "text-[10px] font-bold px-2 py-1.5 rounded-lg border focus:outline-none focus:ring-2 focus:ring-blue-500 uppercase tracking-wider transition-all",
                             u.role === 'admin' ? "bg-purple-50 text-purple-700 border-purple-200" :
+                            u.role === 'push_admin' ? "bg-amber-50 text-amber-800 border-amber-300 font-bold" :
                             u.role === 'faculty' ? "bg-emerald-50 text-emerald-700 border-emerald-200" :
                             "bg-blue-50 text-blue-700 border-blue-200"
                           )}
                         >
                           <option value="student">Student</option>
                           <option value="faculty">Faculty</option>
-                          <option value="admin">Admin</option>
+                          <option value="push_admin">Push Admin</option>
+                          <option value="admin">Super Admin</option>
                         </select>
                       </td>
                       <td className="px-6 py-4 text-right">
@@ -327,9 +329,10 @@ export function UserManagement() {
                   onChange={(e) => setEditingUser({ ...editingUser, role: e.target.value as any })}
                   className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none shadow-sm font-medium"
                 >
-                  <option value="student">Student</option>
-                  <option value="faculty">Faculty</option>
-                  <option value="admin">Admin</option>
+                  <option value="student">Student (Recipient)</option>
+                  <option value="faculty">Faculty (Staff)</option>
+                  <option value="push_admin">Push Admin (Broadcasts &amp; Alerts)</option>
+                  <option value="admin">Super Admin (All Privileges)</option>
                 </select>
               </div>
 
@@ -424,9 +427,10 @@ export function UserManagement() {
                     onChange={(e) => setNewUserRole(e.target.value as any)}
                     className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none shadow-sm font-medium"
                   >
-                    <option value="student">Student</option>
-                    <option value="faculty">Faculty</option>
-                    <option value="admin">Admin</option>
+                    <option value="student">Student (Recipient)</option>
+                    <option value="faculty">Faculty (Staff)</option>
+                    <option value="push_admin">Push Admin (Broadcast &amp; Notifications)</option>
+                    <option value="admin">Super Admin (Full Portal Control)</option>
                   </select>
                 </div>
                 <div>

@@ -22,6 +22,8 @@ export function AdminDashboard({ profile }: { profile: UserProfile }) {
   const [users] = useCollection(usersQuery);
 
   const { branding, theme } = useBranding();
+  const isSuperAdmin = profile.role === 'admin';
+  const isPushAdmin = profile.role === 'push_admin';
 
   const handleEditDraft = (id: string) => {
     setEditingNotificationId(id);
@@ -58,13 +60,15 @@ export function AdminDashboard({ profile }: { profile: UserProfile }) {
             )}>
               <div className="space-y-1.5 max-w-xl">
                 <span className="text-[11px] uppercase font-bold tracking-widest opacity-80">
-                  {branding.institutionName || 'Administrative Console'}
+                  {isPushAdmin ? 'Push Notification Administrator' : (branding.institutionName || 'Administrative Console')}
                 </span>
                 <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">
                   Welcome back, {profile.name}
                 </h2>
                 <p className="text-sm opacity-90 leading-relaxed">
-                  {branding.tagline || 'Manage real-time campus broadcasts, students, and appearance.'}
+                  {isPushAdmin 
+                    ? 'Dispatch real-time announcements, schedule broadcasts, and monitor delivery across mobile and desktop devices.'
+                    : (branding.tagline || 'Manage real-time campus broadcasts, students, and appearance.')}
                 </p>
               </div>
 
@@ -76,13 +80,15 @@ export function AdminDashboard({ profile }: { profile: UserProfile }) {
                   <Plus className="h-4 w-4 text-blue-600" />
                   <span>New Broadcast</span>
                 </button>
-                <button
-                  onClick={() => setActiveTab('branding')}
-                  className="px-4 py-2.5 bg-white/15 hover:bg-white/25 backdrop-blur-md text-white rounded-xl text-xs font-bold transition-all border border-white/20 flex items-center gap-2"
-                >
-                  <Palette className="h-4 w-4" />
-                  <span>Customize Design</span>
-                </button>
+                {isSuperAdmin && (
+                  <button
+                    onClick={() => setActiveTab('branding')}
+                    className="px-4 py-2.5 bg-white/15 hover:bg-white/25 backdrop-blur-md text-white rounded-xl text-xs font-bold transition-all border border-white/20 flex items-center gap-2"
+                  >
+                    <Palette className="h-4 w-4" />
+                    <span>Customize Design</span>
+                  </button>
+                )}
               </div>
             </div>
 
@@ -188,12 +194,16 @@ export function AdminDashboard({ profile }: { profile: UserProfile }) {
                 <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-2xs space-y-4">
                   <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                     <h3 className="text-sm font-bold text-slate-900">Campus Members</h3>
-                    <button 
-                      onClick={() => setActiveTab('users')}
-                      className="text-xs font-semibold text-blue-600 hover:text-blue-700"
-                    >
-                      Manage
-                    </button>
+                    {isSuperAdmin ? (
+                      <button 
+                        onClick={() => setActiveTab('users')}
+                        className="text-xs font-semibold text-blue-600 hover:text-blue-700"
+                      >
+                        Manage
+                      </button>
+                    ) : (
+                      <span className="text-[11px] text-slate-400 font-medium">Audience</span>
+                    )}
                   </div>
                   <div className="space-y-3">
                     {users?.docs.slice(0, 5).map(doc => {
@@ -207,7 +217,9 @@ export function AdminDashboard({ profile }: { profile: UserProfile }) {
                             <p className="text-xs font-bold text-slate-900 truncate">{u.name}</p>
                             <p className="text-[10px] text-slate-500 truncate">
                               {u.department && u.department !== 'All' ? `${u.department} · ` : ''}
-                              <span className="capitalize">{u.role}</span>
+                              <span className="capitalize">
+                                {u.role === 'push_admin' ? 'Push Admin' : u.role}
+                              </span>
                             </p>
                           </div>
                         </div>
@@ -277,14 +289,28 @@ export function AdminDashboard({ profile }: { profile: UserProfile }) {
         );
 
       case 'users':
-        return <UserManagement />;
+        return isSuperAdmin ? <UserManagement /> : (
+          <div className="p-12 text-center text-slate-500 bg-white rounded-2xl border border-slate-200 max-w-xl mx-auto mt-8">
+            <h3 className="text-base font-bold text-slate-900 mb-1">Restricted Access</h3>
+            <p className="text-xs text-slate-500">Student &amp; Staff administration is managed by the Super Administrator.</p>
+          </div>
+        );
 
       case 'branding':
       case 'settings':
-        return <BrandingSettings />;
+        return isSuperAdmin ? <BrandingSettings /> : (
+          <div className="p-12 text-center text-slate-500 bg-white rounded-2xl border border-slate-200 max-w-xl mx-auto mt-8">
+            <h3 className="text-base font-bold text-slate-900 mb-1">Restricted Access</h3>
+            <p className="text-xs text-slate-500">Branding and institutional appearance settings are reserved for Super Administrators.</p>
+          </div>
+        );
 
       default:
-        return <BrandingSettings />;
+        return (
+          <div className="p-12 text-center text-slate-500 bg-white rounded-2xl border border-slate-200 max-w-xl mx-auto mt-8">
+            Page not found
+          </div>
+        );
     }
   };
 

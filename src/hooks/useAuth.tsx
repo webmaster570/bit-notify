@@ -6,7 +6,7 @@ import { doc, getDoc, setDoc } from 'firebase/firestore';
 export interface UserProfile {
   uid: string;
   email: string;
-  role: 'admin' | 'faculty' | 'student';
+  role: 'admin' | 'push_admin' | 'faculty' | 'student';
   name: string;
   department?: string;
   academicYear?: string;
