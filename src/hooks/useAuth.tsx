@@ -11,6 +11,7 @@ export interface UserProfile {
   department?: string;
   academicYear?: string;
   course?: string;
+  category?: string;
 }
 
 export function useAuth() {

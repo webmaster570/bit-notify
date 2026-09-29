@@ -29,11 +29,16 @@ export function StudentDashboard({ profile }: { profile: UserProfile }) {
     const target = data.targetGroup;
     if (!target) return true;
 
-    const deptMatch = !target.department || target.department === 'All' || target.department === profile.department;
+    // Check if any targeted department/category matches the user profile
+    const depts = target.departments || (target.department ? [target.department] : ['All']);
+    const roles = target.categories || (target.category ? [target.category] : ['All']);
+
+    const deptMatch = depts.includes('All') || depts.some((d: string) => d === profile.department);
+    const roleMatch = roles.includes('All') || roles.some((r: string) => r === profile.category || r === profile.role);
     const courseMatch = !target.course || target.course === 'All' || target.course === profile.course;
     const yearMatch = !target.academicYear || target.academicYear === 'All' || target.academicYear === profile.academicYear;
 
-    return deptMatch && courseMatch && yearMatch;
+    return deptMatch && roleMatch && courseMatch && yearMatch;
   }) || [];
 
   const renderContent = () => {

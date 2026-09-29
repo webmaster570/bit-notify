@@ -27,7 +27,7 @@ service cloud.firestore {
 
     match /users/{userId} {
       allow read: if request.auth != null && (request.auth.uid == userId || isAdmin() || isPushAdmin() || isFaculty());
-      allow create: if request.auth != null && (request.auth.uid == userId || isAdmin());
+      allow create: if request.auth != null && (request.auth.uid == userId || isAdmin()) && (request.resource.data.email.lower().endsWith('@bitmesra.ac.in') || isAdmin());
       allow update: if request.auth != null && (request.auth.uid == userId || isAdmin());
       allow delete: if isAdmin();
     }

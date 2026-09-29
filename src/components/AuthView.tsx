@@ -51,6 +51,13 @@ export function AuthView() {
     setError('');
     setLoading(true);
 
+    // Domain validation for new registrations
+    if (!isLogin && !email.toLowerCase().endsWith('@bitmesra.ac.in')) {
+      setError('Registration is restricted to official organizational emails (@bitmesra.ac.in).');
+      setLoading(false);
+      return;
+    }
+
     try {
       if (isLogin) {
         await signInWithEmailAndPassword(auth, email, password);
@@ -266,7 +273,7 @@ export function AuthView() {
                     "focus:ring-" + theme.id + "-500",
                     "focus:border-" + theme.id + "-500"
                   )}
-                  placeholder="name@institute.edu"
+                  placeholder="name@bitmesra.ac.in"
                 />
               </div>
             </div>

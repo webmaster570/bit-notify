@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { auth, db } from '../lib/firebase';
 import { collection, addDoc, serverTimestamp, doc, updateDoc, getDoc, getDocs } from 'firebase/firestore';
-import { Send, Clock, Target, AlertCircle, Paperclip, Upload, FileText, X, FileEdit } from 'lucide-react';
+import { Send, Clock, Target, AlertCircle, Paperclip, Upload, FileText, X, FileEdit, ChevronDown, Check } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useBranding } from '../context/BrandingContext';
 
@@ -11,8 +11,8 @@ export function NotificationForm({ onSuccess, editingId }: { onSuccess: () => vo
   const [body, setBody] = useState('');
   const [priority, setPriority] = useState<'low' | 'medium' | 'high'>('medium');
   const [category, setCategory] = useState('update');
-  const [targetDept, setTargetDept] = useState('All');
-  const [targetRole, setTargetRole] = useState('All');
+  const [targetDepts, setTargetDepts] = useState<string[]>(['All']);
+  const [targetRoles, setTargetRoles] = useState<string[]>(['All']);
   const [targetYear, setTargetYear] = useState('All');
   const [targetCourse, setTargetCourse] = useState('All');
   const [scheduledAt, setScheduledAt] = useState('');
@@ -46,8 +46,13 @@ export function NotificationForm({ onSuccess, editingId }: { onSuccess: () => vo
           setBody(data.body || '');
           setPriority(data.priority || 'medium');
           setCategory(data.category || 'update');
-          setTargetDept(data.targetGroup?.department || 'All');
-          setTargetRole(data.targetGroup?.category || 'All');
+          
+          // Handle legacy single-string fields or new array fields
+          const depts = data.targetGroup?.departments || (data.targetGroup?.department ? [data.targetGroup.department] : ['All']);
+          const roles = data.targetGroup?.categories || (data.targetGroup?.category ? [data.targetGroup.category] : ['All']);
+          
+          setTargetDepts(depts);
+          setTargetRoles(roles);
           setTargetYear(data.targetGroup?.academicYear || 'All');
           setTargetCourse(data.targetGroup?.course || 'All');
           setAttachment(data.attachment || null);
@@ -94,10 +99,13 @@ export function NotificationForm({ onSuccess, editingId }: { onSuccess: () => vo
         category,
         attachment,
         targetGroup: {
-          department: targetDept,
-          category: targetRole,
+          departments: targetDepts,
+          categories: targetRoles,
           academicYear: targetYear,
           course: targetCourse,
+          // Legacy support
+          department: targetDepts.length === 1 ? targetDepts[0] : (targetDepts.includes('All') ? 'All' : 'Multiple'),
+          category: targetRoles.length === 1 ? targetRoles[0] : (targetRoles.includes('All') ? 'All' : 'Multiple'),
         },
         scheduledAt: scheduledAt ? new Date(scheduledAt) : null,
         updatedAt: serverTimestamp(),
@@ -128,8 +136,8 @@ export function NotificationForm({ onSuccess, editingId }: { onSuccess: () => vo
             tokensSnap.forEach(docSnap => {
               const data = docSnap.data();
               if (data && data.token && typeof data.token === 'string') {
-                const deptMatch = !targetDept || targetDept === 'All' || !data.department || data.department === 'All' || String(data.department).toLowerCase() === targetDept.toLowerCase();
-                const roleMatch = !targetRole || targetRole === 'All' || !data.category || data.category === 'All' || String(data.category).toLowerCase() === targetRole.toLowerCase();
+                const deptMatch = targetDepts.includes('All') || !data.department || data.department === 'All' || targetDepts.some(d => d.toLowerCase() === String(data.department).toLowerCase());
+                const roleMatch = targetRoles.includes('All') || !data.category || data.category === 'All' || targetRoles.some(r => r.toLowerCase() === String(data.category).toLowerCase());
                 const courseMatch = !targetCourse || targetCourse === 'All' || !data.course || data.course === 'All' || String(data.course).toLowerCase() === targetCourse.toLowerCase();
                 const yearMatch = !targetYear || targetYear === 'All' || !data.academicYear || data.academicYear === 'All' || String(data.academicYear).toLowerCase() === targetYear.toLowerCase();
                 if (deptMatch && roleMatch && courseMatch && yearMatch) {
@@ -152,8 +160,8 @@ export function NotificationForm({ onSuccess, editingId }: { onSuccess: () => vo
               icon: branding.logoUrl || '/bit-mesra-logo.png?v=4',
               badge: branding.logoUrl || '/bit-mesra-logo.png?v=4',
               targetGroup: {
-                department: targetDept,
-                category: targetRole,
+                departments: targetDepts,
+                categories: targetRoles,
                 academicYear: targetYear,
                 course: targetCourse,
               }
@@ -169,7 +177,7 @@ export function NotificationForm({ onSuccess, editingId }: { onSuccess: () => vo
             if (count > 0) {
               alert(`Broadcast Dispatched!\n\nPush notification sent to ${count} device(s) across campus:\n📱 Mobile: ${mob}\n💻 Desktop: ${desk}`);
             } else {
-              alert(`Broadcast saved, but 0 devices were targeted for "${targetDept} / ${targetCourse}".\n\nPlease ensure students/staff have enabled push notifications on their phones.`);
+              alert(`Broadcast saved, but 0 devices were targeted for your selection.\n\nPlease ensure students/staff have enabled push notifications on their phones.`);
             }
           }
         } catch (pushErr) {
@@ -280,29 +288,23 @@ export function NotificationForm({ onSuccess, editingId }: { onSuccess: () => vo
               <label className="block text-sm font-medium text-slate-700 mb-1 flex items-center gap-2">
                 <Target className="h-4 w-4" /> Target Audience
               </label>
-              <div className="grid grid-cols-2 gap-2 mb-2">
-                <select
-                  value={targetDept}
-                  onChange={(e) => setTargetDept(e.target.value)}
-                  className="px-2 py-2 border border-slate-200 rounded-lg text-xs outline-none"
-                >
-                  <option value="All">All Departments</option>
-                  {systemConfig?.departments.map(d => (
-                    <option key={d} value={d}>{d}</option>
-                  ))}
-                </select>
-                <select
-                  value={targetRole}
-                  onChange={(e) => setTargetRole(e.target.value)}
-                  className="px-2 py-2 border border-slate-200 rounded-lg text-xs outline-none"
-                >
-                  <option value="All">All Roles</option>
-                  {systemConfig?.roles.map(r => (
-                    <option key={r} value={r}>{r}</option>
-                  ))}
-                </select>
+              <div className="space-y-2">
+                <MultiSelect
+                  label="Departments"
+                  options={['All', ...(systemConfig?.departments || [])]}
+                  selected={targetDepts}
+                  onChange={setTargetDepts}
+                  theme={theme}
+                />
+                <MultiSelect
+                  label="Roles"
+                  options={['All', ...(systemConfig?.roles || [])]}
+                  selected={targetRoles}
+                  onChange={setTargetRoles}
+                  theme={theme}
+                />
               </div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-2 mt-2">
                 <input
                   type="text"
                   placeholder="Course (All)"
@@ -463,6 +465,75 @@ export function NotificationForm({ onSuccess, editingId }: { onSuccess: () => vo
           </button>
         </div>
       </form>
+    </div>
+  );
+}
+
+function MultiSelect({ label, options, selected, onChange, theme }: { 
+  label: string, 
+  options: string[], 
+  selected: string[], 
+  onChange: (vals: string[]) => void,
+  theme: any
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  const toggleOption = (opt: string) => {
+    if (opt === 'All') {
+      onChange(['All']);
+    } else {
+      let next = selected.filter(s => s !== 'All');
+      if (next.includes(opt)) {
+        next = next.filter(s => s !== opt);
+        if (next.length === 0) next = ['All'];
+      } else {
+        next.push(opt);
+      }
+      onChange(next);
+    }
+  };
+
+  const displayText = selected.includes('All') ? `All ${label}` : `${selected.length} ${label} selected`;
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full flex items-center justify-between px-3 py-2 border border-slate-200 rounded-lg text-xs bg-white hover:bg-slate-50 transition-colors shadow-xs"
+      >
+        <span className="truncate pr-2 font-medium text-slate-700">{displayText}</span>
+        <ChevronDown className={cn("h-3.5 w-3.5 text-slate-400 transition-transform", isOpen && "rotate-180")} />
+      </button>
+      
+      {isOpen && (
+        <>
+          <div className="fixed inset-0 z-[60]" onClick={() => setIsOpen(false)} />
+          <div className="absolute left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-[70] py-2 max-h-60 overflow-y-auto animate-in fade-in zoom-in-95 duration-100">
+            {options.map(opt => {
+              const isSel = selected.includes(opt);
+              return (
+                <button
+                  key={opt}
+                  type="button"
+                  onClick={() => toggleOption(opt)}
+                  className="w-full flex items-center gap-3 px-4 py-2 hover:bg-slate-50 transition-colors text-left"
+                >
+                  <div className={cn(
+                    "h-4 w-4 rounded border flex items-center justify-center transition-all",
+                    isSel ? cn(theme.bgClass, "border-transparent") : "border-slate-300 bg-white"
+                  )}>
+                    {isSel && <Check className="h-3 w-3 text-white" />}
+                  </div>
+                  <span className={cn("text-xs transition-colors", isSel ? "font-bold text-slate-900" : "text-slate-600")}>
+                    {opt}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
     </div>
   );
 }

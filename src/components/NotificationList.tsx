@@ -274,10 +274,20 @@ export function NotificationList({ notifications: rawNotifications, loading, isA
                         <div className="flex flex-col gap-0.5">
                           <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700">
                             <Users className="h-3 w-3 text-slate-400" />
-                            {data.targetGroup?.category === 'All' ? 'Everyone' : data.targetGroup?.category}
+                            {(() => {
+                              const roles = data.targetGroup?.categories || [data.targetGroup?.category || 'All'];
+                              if (roles.includes('All')) return 'Everyone';
+                              if (roles.length > 1) return `${roles.length} Roles`;
+                              return roles[0];
+                            })()}
                           </div>
                           <span className="text-[10px] text-slate-400 font-medium ml-4 uppercase tracking-tight">
-                            {data.targetGroup?.department === 'All' ? 'All Departments' : data.targetGroup?.department}
+                            {(() => {
+                              const depts = data.targetGroup?.departments || [data.targetGroup?.department || 'All'];
+                              if (depts.includes('All')) return 'All Departments';
+                              if (depts.length > 1) return `${depts.length} Departments`;
+                              return depts[0];
+                            })()}
                           </span>
                         </div>
                       </td>
@@ -408,7 +418,13 @@ export function NotificationList({ notifications: rawNotifications, loading, isA
                     <div className="flex items-center gap-2">
                       <Users className="h-3.5 w-3.5 text-slate-300" />
                       <span className="text-[10px] font-bold text-slate-500">
-                        {data.targetGroup?.category} <span className="text-slate-300 font-normal mx-1">/</span> {data.targetGroup?.department === 'All' ? 'Global' : data.targetGroup?.department}
+                        {(() => {
+                          const roles = data.targetGroup?.categories || [data.targetGroup?.category || 'All'];
+                          const depts = data.targetGroup?.departments || [data.targetGroup?.department || 'All'];
+                          const roleText = roles.includes('All') ? 'Everyone' : (roles.length > 1 ? `${roles.length} Roles` : roles[0]);
+                          const deptText = depts.includes('All') ? 'Global' : (depts.length > 1 ? `${depts.length} Depts` : depts[0]);
+                          return `${roleText} / ${deptText}`;
+                        })()}
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
@@ -516,16 +532,27 @@ export function NotificationList({ notifications: rawNotifications, loading, isA
                 <div>
                   <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Target Audience</h4>
                   <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 space-y-3">
-                    <div className="flex items-center gap-3 text-sm">
-                      <Target className="h-4 w-4 text-slate-400" />
-                      <span className="text-slate-600 font-medium">
-                        {selectedNotification.targetGroup?.category} / {selectedNotification.targetGroup?.department === 'All' ? 'Global' : selectedNotification.targetGroup?.department}
-                      </span>
+                    <div className="flex items-start gap-3 text-sm">
+                      <Target className="h-4 w-4 text-slate-400 mt-0.5" />
+                      <div className="flex flex-col gap-1">
+                        <span className="text-slate-600 font-bold">
+                          {(() => {
+                            const roles = selectedNotification.targetGroup?.categories || [selectedNotification.targetGroup?.category || 'All'];
+                            return roles.includes('All') ? 'All Institutional Roles' : roles.join(', ');
+                          })()}
+                        </span>
+                        <span className="text-slate-500 font-medium text-xs">
+                          {(() => {
+                            const depts = selectedNotification.targetGroup?.departments || [selectedNotification.targetGroup?.department || 'All'];
+                            return depts.includes('All') ? 'All Departments' : depts.join(', ');
+                          })()}
+                        </span>
+                      </div>
                     </div>
                     <div className="flex items-center gap-3 text-sm">
                       <Users className="h-4 w-4 text-slate-400" />
                       <span className="text-slate-600 font-medium">
-                        Year {selectedNotification.targetGroup?.academicYear}
+                        Year {selectedNotification.targetGroup?.academicYear || 'All'}
                       </span>
                     </div>
                   </div>
