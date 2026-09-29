@@ -1,8 +1,26 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { format } from 'date-fns';
-import { Bell, Clock, AlertTriangle, Info, Calendar, Megaphone, Trash2, Paperclip, X, Target, CheckCircle2, Users, Eye, FileEdit } from 'lucide-react';
+import { 
+  Bell, 
+  Clock, 
+  AlertTriangle, 
+  Info, 
+  Calendar, 
+  Megaphone, 
+  Trash2, 
+  Paperclip, 
+  X, 
+  Target, 
+  CheckCircle2, 
+  Users, 
+  Eye, 
+  FileEdit, 
+  Search, 
+  ChevronDown, 
+  Check 
+} from 'lucide-react';
 import { cn } from '../lib/utils';
-import { doc, deleteDoc } from 'firebase/firestore';
+import { doc, deleteDoc, writeBatch } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useBranding } from '../context/BrandingContext';
 
@@ -13,11 +31,41 @@ interface NotificationListProps {
   onEdit?: (id: string) => void;
 }
 
-export function NotificationList({ notifications, loading, isAdmin, onEdit }: NotificationListProps) {
+export function NotificationList({ notifications: rawNotifications, loading, isAdmin, onEdit }: NotificationListProps) {
   const [selectedNotification, setSelectedNotification] = useState<any | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [displayLimit, setDisplayLimit] = useState(10);
   const { theme } = useBranding();
 
-  if (loading) {
+  // Normalize notifications
+  const notifications = useMemo(() => {
+    return (rawNotifications || []).map(n => {
+      const data = typeof n.data === 'function' ? n.data() : n;
+      return {
+        id: n.id || data.id,
+        ...data
+      };
+    }).filter(n => n.id);
+  }, [rawNotifications]);
+
+  // Search/Filter logic
+  const filteredNotifications = useMemo(() => {
+    if (!searchQuery.trim()) return notifications;
+    const query = searchQuery.toLowerCase();
+    return notifications.filter(n => 
+      String(n.title || '').toLowerCase().includes(query) || 
+      String(n.body || '').toLowerCase().includes(query) ||
+      String(n.category || '').toLowerCase().includes(query) ||
+      String(n.targetGroup?.department || '').toLowerCase().includes(query)
+    );
+  }, [notifications, searchQuery]);
+
+  const paginatedNotifications = useMemo(() => {
+    return filteredNotifications.slice(0, displayLimit);
+  }, [filteredNotifications, displayLimit]);
+
+  if (loading && (rawNotifications || []).length === 0) {
     return (
       <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
         <div className="animate-pulse space-y-4 p-6">
@@ -30,28 +78,64 @@ export function NotificationList({ notifications, loading, isAdmin, onEdit }: No
     );
   }
 
-  if (notifications.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center py-16 bg-white rounded-2xl border border-slate-200 border-dashed shadow-sm">
-        <div className="p-4 bg-slate-50 rounded-full mb-4">
-          <Bell className="h-10 w-10 text-slate-300" />
-        </div>
-        <h3 className="text-lg font-bold text-slate-900">No Notifications</h3>
-        <p className="text-slate-500 max-w-xs text-center mt-1">There are no notifications to display at this time.</p>
-      </div>
-    );
-  }
-
   const handleDelete = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
-    if (confirm('Are you sure you want to delete this notification?')) {
-      await deleteDoc(doc(db, 'notifications', id));
+    if (!id) {
+      alert('Cannot delete: Notification ID is missing.');
+      return;
+    }
+    if (confirm('Delete this notification record? This cannot be undone.')) {
+      try {
+        const docRef = doc(db, 'notifications', id);
+        await deleteDoc(docRef);
+        alert('Notification deleted successfully.');
+        setSelectedIds(prev => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+      } catch (err: any) {
+        console.error('Delete error:', err);
+        alert(`Delete failed: ${err.message || 'Check your permissions.'}`);
+      }
     }
   };
 
-  const handleEditClick = (e: React.MouseEvent, id: string) => {
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    if (confirm(`Are you sure you want to delete ${selectedIds.size} notifications?`)) {
+      try {
+        const batch = writeBatch(db);
+        selectedIds.forEach(id => {
+          const docRef = doc(db, 'notifications', id);
+          batch.delete(docRef);
+        });
+        await batch.commit();
+        alert(`${selectedIds.size} notifications deleted successfully.`);
+        setSelectedIds(new Set());
+      } catch (err: any) {
+        console.error('Bulk delete error:', err);
+        alert(`Bulk delete failed: ${err.message || 'Check your permissions.'}`);
+      }
+    }
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === paginatedNotifications.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(paginatedNotifications.map(n => n.id)));
+    }
+  };
+
+  const toggleSelect = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
-    if (onEdit) onEdit(id);
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   };
 
   const priorityColors = {
@@ -69,103 +153,295 @@ export function NotificationList({ notifications, loading, isAdmin, onEdit }: No
 
   return (
     <div className="space-y-6">
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-slate-50/50 border-b border-slate-200">
-                <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Date & Time</th>
-                <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Category</th>
-                <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Title</th>
-                <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {notifications.map((n) => {
-                const data = n.data();
-                const date = data.createdAt?.toDate() || new Date();
+      {/* List Header & Controls */}
+      <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+        <div className="relative w-full sm:w-80">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Search notifications..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all shadow-xs"
+          />
+        </div>
 
-                return (
-                  <tr 
-                    key={n.id} 
-                    className="hover:bg-slate-50/80 transition-colors cursor-pointer group"
-                    onClick={() => setSelectedNotification({ id: n.id, ...data })}
-                  >
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center gap-2 text-sm text-slate-500 font-medium">
-                        <Clock className="h-3.5 w-3.5 text-slate-400" />
-                        {format(date, 'MMM d, yyyy • h:mm a')}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center gap-2">
-                        <div className={cn(
-                          "p-1.5 bg-slate-100 rounded text-slate-500 transition-colors",
-                          "group-hover:" + theme.lightBgClass,
-                          "group-hover:" + theme.textClass
-                        )}>
-                          {categoryIcons[data.category as keyof typeof categoryIcons] || <Bell className="h-4 w-4" />}
+        {isAdmin && (
+          <div className="flex items-center gap-3 w-full sm:w-auto">
+            {selectedIds.size > 0 && (
+              <button
+                onClick={handleBulkDelete}
+                className="flex-1 sm:flex-none px-4 py-2 bg-red-50 text-red-600 rounded-xl text-xs font-bold border border-red-100 hover:bg-red-100 transition-all flex items-center justify-center gap-2"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Delete Selected ({selectedIds.size})
+              </button>
+            )}
+            <span className="text-[11px] text-slate-400 font-medium whitespace-nowrap ml-auto sm:ml-0">
+              {filteredNotifications.length} Results
+            </span>
+          </div>
+        )}
+      </div>
+
+      {filteredNotifications.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-20 bg-white rounded-3xl border border-slate-100 shadow-sm">
+          <div className="p-5 bg-slate-50 rounded-full mb-5 text-slate-300">
+            <Bell className="h-12 w-12" />
+          </div>
+          <h3 className="text-xl font-bold text-slate-900">No Announcements Found</h3>
+          <p className="text-slate-500 max-w-xs text-center mt-2 text-sm leading-relaxed">
+            {searchQuery ? "No results match your search criteria." : "The notice board is currently empty."}
+          </p>
+        </div>
+      ) : (
+        <>
+          {/* Desktop Table View */}
+          <div className="hidden lg:block bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-slate-50/50 border-b border-slate-200">
+                  {isAdmin && (
+                    <th className="pl-8 py-5 w-4">
+                      <button 
+                        onClick={toggleSelectAll}
+                        className={cn(
+                          "h-4 w-4 rounded border flex items-center justify-center transition-all",
+                          selectedIds.size === paginatedNotifications.length && paginatedNotifications.length > 0
+                            ? cn(theme.bgClass, "border-transparent")
+                            : "border-slate-300 bg-white"
+                        )}
+                      >
+                        {selectedIds.size === paginatedNotifications.length && paginatedNotifications.length > 0 && (
+                          <Check className="h-3 w-3 text-white" />
+                        )}
+                      </button>
+                    </th>
+                  )}
+                  <th className={cn("py-5 text-[10px] font-bold text-slate-500 uppercase tracking-widest", !isAdmin && "pl-8")}>Notice Title</th>
+                  <th className="px-6 py-5 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Targeting</th>
+                  <th className="px-6 py-5 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Type</th>
+                  <th className="px-6 py-5 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Priority</th>
+                  <th className="px-8 py-5 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-right">Dispatch Date</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {paginatedNotifications.map((data) => {
+                  const id = data.id;
+                  const date = data.createdAt?.toDate() || new Date();
+                  const isSelected = selectedIds.has(id);
+
+                  return (
+                    <tr 
+                      key={id} 
+                      className={cn(
+                        "hover:bg-slate-50/80 transition-colors cursor-pointer group",
+                        isSelected && "bg-blue-50/30"
+                      )}
+                      onClick={() => setSelectedNotification(data)}
+                    >
+                      {isAdmin && (
+                        <td className="pl-8 py-6">
+                          <button 
+                            onClick={(e) => toggleSelect(e, id)}
+                            className={cn(
+                              "h-4 w-4 rounded border flex items-center justify-center transition-all",
+                              isSelected ? cn(theme.bgClass, "border-transparent") : "border-slate-200 bg-white group-hover:border-slate-300"
+                            )}
+                          >
+                            {isSelected && <Check className="h-3 w-3 text-white" />}
+                          </button>
+                        </td>
+                      )}
+                      <td className={cn("py-6", !isAdmin && "pl-8")}>
+                        <div className="flex flex-col gap-1 max-w-md">
+                          <div className="flex items-center gap-2">
+                            <p className={cn("text-sm font-bold text-slate-900 transition-colors line-clamp-1", "group-hover:" + theme.textClass)}>
+                              {data.title || '(Untitled)'}
+                            </p>
+                            {data.status === 'draft' && (
+                              <span className="px-2 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider border bg-slate-100 text-slate-600 border-slate-200">
+                                Draft
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-slate-500 line-clamp-1">
+                            {data.body}
+                          </p>
                         </div>
-                        <span className="text-xs font-bold uppercase tracking-wider text-slate-600 capitalize">
-                          {data.category}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <p className={cn("text-sm font-bold text-slate-900 transition-colors line-clamp-1", "group-hover:" + theme.textClass)}>
-                          {data.title || '(Untitled Draft)'}
-                        </p>
+                      </td>
+                      <td className="px-6 py-6 whitespace-nowrap">
+                        <div className="flex flex-col gap-0.5">
+                          <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700">
+                            <Users className="h-3 w-3 text-slate-400" />
+                            {data.targetGroup?.category === 'All' ? 'Everyone' : data.targetGroup?.category}
+                          </div>
+                          <span className="text-[10px] text-slate-400 font-medium ml-4 uppercase tracking-tight">
+                            {data.targetGroup?.department === 'All' ? 'All Departments' : data.targetGroup?.department}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-6 whitespace-nowrap">
                         <div className="flex items-center gap-2">
+                          <div className={cn(
+                            "p-1.5 bg-slate-100 rounded-lg text-slate-500",
+                            "group-hover:" + theme.lightBgClass,
+                            "group-hover:" + theme.textClass
+                          )}>
+                            {categoryIcons[data.category as keyof typeof categoryIcons] || <Bell className="h-3.5 w-3.5" />}
+                          </div>
+                          <span className="text-xs font-semibold text-slate-600 capitalize">
+                            {data.category}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-6 whitespace-nowrap">
+                        <span className={cn(
+                          "px-2 py-1 rounded-lg text-[9px] font-bold uppercase tracking-wider border",
+                          priorityColors[data.priority as keyof typeof priorityColors]
+                        )}>
+                          {data.priority}
+                        </span>
+                      </td>
+                      <td className="px-8 py-6 text-right whitespace-nowrap">
+                        <div className="flex items-center justify-end gap-6">
+                          <div className="flex flex-col items-end gap-0.5">
+                            <span className="text-sm font-bold text-slate-900 group-hover:text-slate-700">
+                              {format(date, 'MMM d, yyyy')}
+                            </span>
+                            <span className="text-[10px] text-slate-400 font-medium">
+                              {format(date, 'h:mm a')}
+                            </span>
+                          </div>
+                          {isAdmin && (
+                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                              {data.status === 'draft' && onEdit && (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); onEdit(id); }}
+                                  className={cn("p-2 rounded-xl transition-all", theme.textClass, "hover:" + theme.lightBgClass)}
+                                  title="Edit Draft"
+                                >
+                                  <FileEdit className="h-4 w-4" />
+                                </button>
+                              )}
+                              <button
+                                onClick={(e) => handleDelete(e, id)}
+                                className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"
+                                title="Delete"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile & Tablet Card View */}
+          <div className="lg:hidden space-y-4">
+            {paginatedNotifications.map((data) => {
+              const id = data.id;
+              const date = data.createdAt?.toDate() || new Date();
+              const isSelected = selectedIds.has(id);
+
+              return (
+                <div 
+                  key={id}
+                  onClick={() => setSelectedNotification(data)}
+                  className={cn(
+                    "bg-white rounded-3xl border border-slate-200 p-5 shadow-sm active:bg-slate-50 transition-colors relative",
+                    isSelected && "border-blue-300 ring-1 ring-blue-100"
+                  )}
+                >
+                  {isAdmin && (
+                    <button 
+                      onClick={(e) => toggleSelect(e, id)}
+                      className={cn(
+                        "absolute top-4 left-4 h-5 w-5 rounded-full border flex items-center justify-center transition-all z-10",
+                        isSelected ? cn(theme.bgClass, "border-transparent") : "border-slate-200 bg-white"
+                      )}
+                    >
+                      {isSelected && <Check className="h-3 w-3 text-white" />}
+                    </button>
+                  )}
+
+                  <div className={cn("flex items-start justify-between mb-4", isAdmin && "pl-8")}>
+                    <div className="flex items-center gap-3">
+                      <div className={cn(
+                        "p-2.5 rounded-2xl",
+                        theme.lightBgClass,
+                        theme.textClass
+                      )}>
+                        {categoryIcons[data.category as keyof typeof categoryIcons] || <Bell className="h-5 w-5" />}
+                      </div>
+                      <div>
+                        <h4 className="text-base font-bold text-slate-900 leading-tight">
+                          {data.title || '(Untitled)'}
+                        </h4>
+                        <div className="flex items-center gap-2 mt-1">
                           <span className={cn(
-                            "px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border whitespace-nowrap",
+                            "px-1.5 py-0.5 rounded-md text-[8px] font-bold uppercase tracking-widest border",
                             priorityColors[data.priority as keyof typeof priorityColors]
                           )}>
                             {data.priority}
                           </span>
-                          {data.status === 'draft' && (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border bg-slate-100 text-slate-600 border-slate-200">
-                              Draft
-                            </span>
-                          )}
                         </div>
                       </div>
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        {isAdmin && data.status === 'draft' && (
-                          <button
-                            onClick={(e) => handleEditClick(e, n.id)}
-                            className={cn("p-2 rounded-lg transition-all", theme.textClass, "hover:" + theme.lightBgClass)}
-                            title="Continue Composing"
-                          >
-                            <FileEdit className="h-4 w-4" />
-                          </button>
-                        )}
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">
+                        {format(date, 'MMM d')}
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <p className="text-sm text-slate-500 line-clamp-2 mb-5 leading-relaxed bg-slate-50/50 p-3 rounded-2xl">
+                    {data.body}
+                  </p>
+                  
+                  <div className="flex items-center justify-between pt-4 border-t border-slate-50">
+                    <div className="flex items-center gap-2">
+                      <Users className="h-3.5 w-3.5 text-slate-300" />
+                      <span className="text-[10px] font-bold text-slate-500">
+                        {data.targetGroup?.category} <span className="text-slate-300 font-normal mx-1">/</span> {data.targetGroup?.department === 'All' ? 'Global' : data.targetGroup?.department}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {isAdmin && (
                         <button
-                          className={cn("p-2 text-slate-400 rounded-lg transition-all opacity-0 group-hover:opacity-100", "hover:" + theme.textClass, "hover:" + theme.lightBgClass)}
-                          title="View Details"
+                          onClick={(e) => handleDelete(e, id)}
+                          className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors mr-2"
                         >
-                          <Eye className="h-4 w-4" />
+                          <Trash2 className="h-4 w-4" />
                         </button>
-                        {isAdmin && (
-                          <button
-                            onClick={(e) => handleDelete(e, n.id)}
-                            className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover:opacity-100"
-                            title="Delete Notification"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
+                      )}
+                      <Eye className={cn("h-4 w-4", theme.textClass)} />
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Pagination Load More */}
+          {filteredNotifications.length > displayLimit && (
+            <div className="flex justify-center pt-4">
+              <button
+                onClick={() => setDisplayLimit(prev => prev + 10)}
+                className="px-8 py-3 bg-white border border-slate-200 rounded-2xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all flex items-center gap-2 shadow-sm"
+              >
+                Load More Results
+                <ChevronDown className="h-4 w-4" />
+              </button>
+            </div>
+          )}
+        </>
+      )}
 
       {/* Detail Modal */}
       {selectedNotification && (
@@ -243,13 +519,13 @@ export function NotificationList({ notifications, loading, isAdmin, onEdit }: No
                     <div className="flex items-center gap-3 text-sm">
                       <Target className="h-4 w-4 text-slate-400" />
                       <span className="text-slate-600 font-medium">
-                        {selectedNotification.targetGroup.department} • {selectedNotification.targetGroup.course}
+                        {selectedNotification.targetGroup?.category} / {selectedNotification.targetGroup?.department === 'All' ? 'Global' : selectedNotification.targetGroup?.department}
                       </span>
                     </div>
                     <div className="flex items-center gap-3 text-sm">
                       <Users className="h-4 w-4 text-slate-400" />
                       <span className="text-slate-600 font-medium">
-                        Academic Year {selectedNotification.targetGroup.academicYear}
+                        Year {selectedNotification.targetGroup?.academicYear}
                       </span>
                     </div>
                   </div>
@@ -304,4 +580,3 @@ export function NotificationList({ notifications, loading, isAdmin, onEdit }: No
     </div>
   );
 }
-

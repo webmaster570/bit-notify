@@ -6,7 +6,8 @@ import { Layout } from './Layout';
 import { NotificationForm } from './NotificationForm';
 import { NotificationList } from './NotificationList';
 import { UserProfile } from '../hooks/useAuth';
-import { Users, Bell, TrendingUp, CheckCircle2, Send, Palette, Plus, ArrowRight } from 'lucide-react';
+import { format } from 'date-fns';
+import { Users, Bell, TrendingUp, CheckCircle2, Send, Palette, Plus, ArrowRight, Clock, Megaphone } from 'lucide-react';
 import { UserManagement } from './UserManagement';
 import { NotificationPermissionBanner } from './NotificationPermissionBanner';
 import { BrandingSettings } from './BrandingSettings';
@@ -156,45 +157,73 @@ export function AdminDashboard({ profile }: { profile: UserProfile }) {
                 {/* Recent Alerts List */}
                 <div className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-2xs space-y-4">
                   <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                    <h3 className="text-sm font-bold text-slate-900">Recent Campus Broadcasts</h3>
+                    <div className="flex items-center gap-2">
+                      <div className={cn("p-1.5 rounded-lg", theme.lightBgClass)}>
+                        <Clock className={cn("h-3.5 w-3.5", theme.textClass)} />
+                      </div>
+                      <h3 className="text-sm font-bold text-slate-900">Recent Activity</h3>
+                    </div>
                     <button
                       onClick={() => setActiveTab('notifications')}
-                      className="text-xs font-semibold text-blue-600 hover:text-blue-700"
+                      className={cn("text-[11px] font-bold uppercase tracking-wider transition-colors", theme.textClass, "hover:opacity-75")}
                     >
-                      View All
+                      Full History
                     </button>
                   </div>
 
                   {loadingNotifs ? (
-                    <div className="py-8 text-center text-xs text-slate-400 animate-pulse">Loading broadcast history...</div>
+                    <div className="py-12 text-center">
+                      <div className="inline-block h-6 w-6 border-2 border-slate-200 border-t-blue-600 rounded-full animate-spin mb-2" />
+                      <p className="text-[11px] text-slate-400 font-medium">Retrieving history...</p>
+                    </div>
                   ) : notifications && notifications.docs.length > 0 ? (
-                    <div className="divide-y divide-slate-100">
+                    <div className="space-y-3">
                       {notifications.docs.slice(0, 4).map((docSnap) => {
                         const notif = docSnap.data();
+                        const date = notif.createdAt?.toDate() || new Date();
                         return (
-                          <div key={docSnap.id} className="py-3 flex items-start justify-between gap-3">
-                            <div className="space-y-1 min-w-0">
-                              <h5 className="text-xs font-bold text-slate-900 truncate">{notif.title}</h5>
-                              <p className="text-[11px] text-slate-500 line-clamp-1">{notif.body}</p>
-                              <div className="flex items-center gap-2 text-[10px] text-slate-400">
-                                <span>{notif.targetGroup?.department || 'All Depts'}</span>
-                                <span>·</span>
-                                <span>{notif.createdAt?.toDate ? notif.createdAt.toDate().toLocaleDateString() : 'Recent'}</span>
+                          <div 
+                            key={docSnap.id} 
+                            className="group p-3 rounded-xl border border-transparent hover:border-slate-100 hover:bg-slate-50/50 transition-all cursor-pointer"
+                            onClick={() => setActiveTab('notifications')}
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="space-y-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <h5 className="text-xs font-bold text-slate-900 truncate group-hover:text-blue-600 transition-colors">
+                                    {notif.title}
+                                  </h5>
+                                  <span className={cn(
+                                    "px-1.5 py-0.5 text-[8px] font-bold rounded uppercase tracking-tighter",
+                                    notif.status === 'sent' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
+                                  )}>
+                                    {notif.status === 'sent' ? 'Sent' : 'Draft'}
+                                  </span>
+                                </div>
+                                <p className="text-[10px] text-slate-500 line-clamp-1 leading-relaxed">{notif.body}</p>
+                                <div className="flex items-center gap-2 text-[9px] text-slate-400 font-medium">
+                                  <span className="flex items-center gap-1">
+                                    <Users className="h-2.5 w-2.5" />
+                                    {notif.targetGroup?.department === 'All' ? 'Global' : notif.targetGroup?.department}
+                                  </span>
+                                  <span>·</span>
+                                  <span>{format(date, 'MMM d, h:mm a')}</span>
+                                </div>
+                              </div>
+                              <div className="shrink-0 opacity-0 group-hover:opacity-100 transition-all translate-x-2 group-hover:translate-x-0">
+                                <ArrowRight className="h-3.5 w-3.5 text-slate-300" />
                               </div>
                             </div>
-                            <span className={cn(
-                              "px-2 py-0.5 text-[10px] font-semibold rounded shrink-0",
-                              notif.status === 'sent' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
-                            )}>
-                              {notif.status === 'sent' ? 'Delivered' : 'Scheduled'}
-                            </span>
                           </div>
                         );
                       })}
                     </div>
                   ) : (
-                    <div className="py-8 text-center text-xs text-slate-400">
-                      No announcements broadcasted yet. Click &quot;Start Broadcast&quot; above.
+                    <div className="py-12 text-center flex flex-col items-center">
+                      <div className="p-3 bg-slate-50 rounded-full mb-3">
+                        <Megaphone className="h-6 w-6 text-slate-300" />
+                      </div>
+                      <p className="text-xs text-slate-400 font-medium">No announcements recorded.</p>
                     </div>
                   )}
                 </div>
