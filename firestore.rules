@@ -47,5 +47,10 @@ service cloud.firestore {
       allow read: if request.auth != null;
       allow write: if isAdmin();
     }
+
+    match /system/config {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
   }
 }

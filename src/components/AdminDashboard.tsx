@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { db } from '../lib/firebase';
-import { collection, query, orderBy, limit } from 'firebase/firestore';
+import { auth, db } from '../lib/firebase';
+import { collection, query, orderBy, limit, where } from 'firebase/firestore';
 import { useCollection } from 'react-firebase-hooks/firestore';
 import { Layout } from './Layout';
 import { NotificationForm } from './NotificationForm';
@@ -16,14 +16,29 @@ import { cn } from '../lib/utils';
 export function AdminDashboard({ profile }: { profile: UserProfile }) {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [editingNotificationId, setEditingNotificationId] = useState<string | null>(null);
-  const [notifsQuery] = useState(query(collection(db, 'notifications'), orderBy('createdAt', 'desc'), limit(50)));
+  
+  const isSuperAdmin = profile.role === 'admin';
+  const isPushAdmin = profile.role === 'push_admin';
+
+  // For push admins, only show their own notifications
+  const [notifsQuery] = useState(() => {
+    const baseQuery = collection(db, 'notifications');
+    if (isPushAdmin) {
+      return query(
+        baseQuery, 
+        where('createdBy', '==', auth.currentUser?.uid || 'none'),
+        orderBy('createdAt', 'desc'), 
+        limit(50)
+      );
+    }
+    return query(baseQuery, orderBy('createdAt', 'desc'), limit(50));
+  });
+
   const [notifications, loadingNotifs] = useCollection(notifsQuery);
   const [usersQuery] = useState(query(collection(db, 'users'), limit(100)));
   const [users] = useCollection(usersQuery);
 
   const { branding, theme } = useBranding();
-  const isSuperAdmin = profile.role === 'admin';
-  const isPushAdmin = profile.role === 'push_admin';
 
   const handleEditDraft = (id: string) => {
     setEditingNotificationId(id);
@@ -42,7 +57,7 @@ export function AdminDashboard({ profile }: { profile: UserProfile }) {
 
   const stats = [
     { label: 'Campus Members', value: totalUsers, icon: Users, subtext: 'Registered students & staff' },
-    { label: 'Total Broadcasts', value: totalBroadcasts, icon: Bell, subtext: 'Historical alerts created' },
+    { label: isPushAdmin ? 'Your Broadcasts' : 'Total Broadcasts', value: totalBroadcasts, icon: Bell, subtext: 'Historical alerts created' },
     { label: 'Delivered Alerts', value: sentNotifications, icon: TrendingUp, subtext: 'Dispatched in real-time' },
     { label: 'Scheduled Queue', value: scheduledNotifications, icon: CheckCircle2, subtext: 'Pending auto-dispatch' },
   ];

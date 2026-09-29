@@ -43,6 +43,25 @@ const databaseId = process.env.FIREBASE_DATABASE_ID || "ai-studio-45fb3207-d536-
 let db = getFirestore(databaseId);
 const messaging = getMessaging();
 
+// Initialize system config if missing
+async function ensureSystemConfig() {
+  try {
+    const configRef = db.collection('system').doc('config');
+    const doc = await configRef.get();
+    if (!doc.exists) {
+      console.log('Initializing system config...');
+      await configRef.set({
+        roles: ['Faculty', 'Staff', 'Student', 'PhD Scholars'],
+        departments: ['ICT', 'Mathematics', 'Physics', 'Chemistry', 'Business', 'Engineering'],
+        updatedAt: new Date()
+      });
+    }
+  } catch (err) {
+    console.warn('Failed to ensure system config:', err);
+  }
+}
+ensureSystemConfig();
+
 console.log(`Firestore initialized with projectId: ${getApps()[0].options.projectId}, databaseId: ${databaseId}`);
 
 let currentLogoBase64: string | null = null;

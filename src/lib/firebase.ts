@@ -165,6 +165,7 @@ export const requestForToken = async (registration?: ServiceWorkerRegistration) 
           email: auth.currentUser.email,
           uid: auth.currentUser.uid,
           department: userData.department || 'All',
+          category: userData.category || 'All',
           course: userData.course || 'All',
           academicYear: userData.academicYear || 'All'
         };

@@ -1,23 +1,40 @@
 import React, { useState, useEffect } from 'react';
-import { db } from '../lib/firebase';
+import { auth, db } from '../lib/firebase';
 import { collection, addDoc, serverTimestamp, doc, updateDoc, getDoc, getDocs } from 'firebase/firestore';
 import { Send, Clock, Target, AlertCircle, Paperclip, Upload, FileText, X, FileEdit } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useBranding } from '../context/BrandingContext';
 
 export function NotificationForm({ onSuccess, editingId }: { onSuccess: () => void, editingId?: string | null }) {
-  const { branding } = useBranding();
+  const { branding, theme } = useBranding();
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [priority, setPriority] = useState<'low' | 'medium' | 'high'>('medium');
   const [category, setCategory] = useState('update');
   const [targetDept, setTargetDept] = useState('All');
+  const [targetRole, setTargetRole] = useState('All');
   const [targetYear, setTargetYear] = useState('All');
   const [targetCourse, setTargetCourse] = useState('All');
   const [scheduledAt, setScheduledAt] = useState('');
   const [attachment, setAttachment] = useState<{ name: string, data: string, type: string } | null>(null);
   const [loading, setLoading] = useState(false);
   const [isDrafting, setIsDrafting] = useState(false);
+
+  const [systemConfig, setSystemConfig] = useState<{ roles: string[], departments: string[] } | null>(null);
+
+  useEffect(() => {
+    const fetchConfig = async () => {
+      const snap = await getDoc(doc(db, 'system', 'config'));
+      if (snap.exists()) {
+        const data = snap.data();
+        setSystemConfig({
+          roles: data.roles || [],
+          departments: data.departments || []
+        });
+      }
+    };
+    fetchConfig();
+  }, []);
 
   useEffect(() => {
     if (editingId) {
@@ -30,6 +47,7 @@ export function NotificationForm({ onSuccess, editingId }: { onSuccess: () => vo
           setPriority(data.priority || 'medium');
           setCategory(data.category || 'update');
           setTargetDept(data.targetGroup?.department || 'All');
+          setTargetRole(data.targetGroup?.category || 'All');
           setTargetYear(data.targetGroup?.academicYear || 'All');
           setTargetCourse(data.targetGroup?.course || 'All');
           setAttachment(data.attachment || null);
@@ -77,6 +95,7 @@ export function NotificationForm({ onSuccess, editingId }: { onSuccess: () => vo
         attachment,
         targetGroup: {
           department: targetDept,
+          category: targetRole,
           academicYear: targetYear,
           course: targetCourse,
         },
@@ -87,6 +106,7 @@ export function NotificationForm({ onSuccess, editingId }: { onSuccess: () => vo
           sentCount: 0,
           readCount: 0,
         },
+        createdBy: auth.currentUser?.uid || 'system',
       };
 
       if (editingId) {
@@ -109,9 +129,10 @@ export function NotificationForm({ onSuccess, editingId }: { onSuccess: () => vo
               const data = docSnap.data();
               if (data && data.token && typeof data.token === 'string') {
                 const deptMatch = !targetDept || targetDept === 'All' || !data.department || data.department === 'All' || String(data.department).toLowerCase() === targetDept.toLowerCase();
+                const roleMatch = !targetRole || targetRole === 'All' || !data.category || data.category === 'All' || String(data.category).toLowerCase() === targetRole.toLowerCase();
                 const courseMatch = !targetCourse || targetCourse === 'All' || !data.course || data.course === 'All' || String(data.course).toLowerCase() === targetCourse.toLowerCase();
                 const yearMatch = !targetYear || targetYear === 'All' || !data.academicYear || data.academicYear === 'All' || String(data.academicYear).toLowerCase() === targetYear.toLowerCase();
-                if (deptMatch && courseMatch && yearMatch) {
+                if (deptMatch && roleMatch && courseMatch && yearMatch) {
                   targetTokens.push(data.token);
                 }
               }
@@ -132,6 +153,7 @@ export function NotificationForm({ onSuccess, editingId }: { onSuccess: () => vo
               badge: branding.logoUrl || '/bit-mesra-logo.png?v=4',
               targetGroup: {
                 department: targetDept,
+                category: targetRole,
                 academicYear: targetYear,
                 course: targetCourse,
               }
@@ -178,9 +200,9 @@ export function NotificationForm({ onSuccess, editingId }: { onSuccess: () => vo
       <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
         <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
           {editingId ? (
-            <FileEdit className="h-5 w-5 text-blue-600" />
+            <FileEdit className={cn("h-5 w-5", theme.textClass)} />
           ) : (
-            <Send className="h-5 w-5 text-blue-600" />
+            <Send className={cn("h-5 w-5", theme.textClass)} />
           )}
           {editingId ? 'Edit Draft' : 'Create Broadcast'}
         </h3>
@@ -196,7 +218,10 @@ export function NotificationForm({ onSuccess, editingId }: { onSuccess: () => vo
                 required
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+                className={cn(
+                  "w-full px-4 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:border-transparent outline-none transition-all",
+                  "focus:ring-" + theme.id + "-500"
+                )}
                 placeholder="e.g. End Semester Exam Schedule"
               />
             </div>
@@ -207,7 +232,10 @@ export function NotificationForm({ onSuccess, editingId }: { onSuccess: () => vo
                 rows={4}
                 value={body}
                 onChange={(e) => setBody(e.target.value)}
-                className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all resize-none"
+                className={cn(
+                  "w-full px-4 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:border-transparent outline-none transition-all resize-none",
+                  "focus:ring-" + theme.id + "-500"
+                )}
                 placeholder="Details of the announcement..."
               />
             </div>
@@ -220,7 +248,10 @@ export function NotificationForm({ onSuccess, editingId }: { onSuccess: () => vo
                 <select
                   value={priority}
                   onChange={(e) => setPriority(e.target.value as any)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                  className={cn(
+                    "w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 outline-none text-sm",
+                    "focus:ring-" + theme.id + "-500"
+                  )}
                 >
                   <option value="low">Low</option>
                   <option value="medium">Medium</option>
@@ -232,7 +263,10 @@ export function NotificationForm({ onSuccess, editingId }: { onSuccess: () => vo
                 <select
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                  className={cn(
+                    "w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 outline-none text-sm",
+                    "focus:ring-" + theme.id + "-500"
+                  )}
                 >
                   <option value="update">Campus Update</option>
                   <option value="class">Class Alert</option>
@@ -246,14 +280,29 @@ export function NotificationForm({ onSuccess, editingId }: { onSuccess: () => vo
               <label className="block text-sm font-medium text-slate-700 mb-1 flex items-center gap-2">
                 <Target className="h-4 w-4" /> Target Audience
               </label>
-              <div className="grid grid-cols-3 gap-2">
-                <input
-                  type="text"
-                  placeholder="Dept (All)"
+              <div className="grid grid-cols-2 gap-2 mb-2">
+                <select
                   value={targetDept}
                   onChange={(e) => setTargetDept(e.target.value)}
-                  className="px-2 py-2 border border-slate-200 rounded-lg text-xs"
-                />
+                  className="px-2 py-2 border border-slate-200 rounded-lg text-xs outline-none"
+                >
+                  <option value="All">All Departments</option>
+                  {systemConfig?.departments.map(d => (
+                    <option key={d} value={d}>{d}</option>
+                  ))}
+                </select>
+                <select
+                  value={targetRole}
+                  onChange={(e) => setTargetRole(e.target.value)}
+                  className="px-2 py-2 border border-slate-200 rounded-lg text-xs outline-none"
+                >
+                  <option value="All">All Roles</option>
+                  {systemConfig?.roles.map(r => (
+                    <option key={r} value={r}>{r}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
                 <input
                   type="text"
                   placeholder="Course (All)"
@@ -279,7 +328,10 @@ export function NotificationForm({ onSuccess, editingId }: { onSuccess: () => vo
                 type="datetime-local"
                 value={scheduledAt}
                 onChange={(e) => setScheduledAt(e.target.value)}
-                className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                className={cn(
+                  "w-full px-4 py-2 border border-slate-200 rounded-xl focus:ring-2 outline-none text-sm",
+                  "focus:ring-" + theme.id + "-500"
+                )}
               />
             </div>
 
@@ -310,7 +362,7 @@ export function NotificationForm({ onSuccess, editingId }: { onSuccess: () => vo
                       <button 
                         type="button"
                         onClick={(e) => { e.preventDefault(); setAttachment(null); }}
-                        className="ml-2 p-1 hover:bg-blue-100 rounded-full"
+                        className={cn("ml-2 p-1 rounded-full", theme.lightBgClass)}
                       >
                         <X className="h-3 w-3" />
                       </button>
@@ -383,7 +435,7 @@ export function NotificationForm({ onSuccess, editingId }: { onSuccess: () => vo
                 alert(`Network/Client Error:\n${err.message}`);
               }
             }}
-            className="text-xs font-semibold text-slate-400 hover:text-blue-600 transition-colors mr-auto"
+            className={cn("text-xs font-semibold text-slate-400 transition-colors mr-auto", theme.hoverClass.replace('hover:bg-', 'hover:text-'))}
           >
             Send Test Push
           </button>
@@ -400,7 +452,11 @@ export function NotificationForm({ onSuccess, editingId }: { onSuccess: () => vo
           <button
             type="submit"
             disabled={loading}
-            className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 transition-all shadow-sm shadow-blue-200 disabled:opacity-50"
+            className={cn(
+              "flex items-center gap-2 px-6 py-2.5 text-white font-semibold rounded-xl transition-all shadow-sm disabled:opacity-50",
+              theme.bgClass,
+              theme.hoverClass
+            )}
           >
             {loading && !isDrafting ? 'Processing...' : (scheduledAt ? 'Schedule' : 'Broadcast Now')}
             <Send className="h-4 w-4" />

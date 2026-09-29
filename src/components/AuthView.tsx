@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { auth, db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { GraduationCap, Shield, Landmark, Bell, BookOpen, Sparkles, Mail, Lock, User, Calendar, Building } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useBranding } from '../context/BrandingContext';
@@ -12,12 +12,39 @@ export function AuthView() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
-  const [role, setRole] = useState<'student' | 'faculty' | 'admin'>('student');
+  const [role, setRole] = useState('Student');
   const [department, setDepartment] = useState('');
   const [course, setCourse] = useState('');
   const [academicYear, setAcademicYear] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const [systemConfig, setSystemConfig] = useState<{ roles: string[], departments: string[] } | null>(null);
+
+  useEffect(() => {
+    const fetchConfig = async () => {
+      try {
+        const configSnap = await getDoc(doc(db, 'system', 'config'));
+        if (configSnap.exists()) {
+          const data = configSnap.data();
+          const roles = data.roles || ['Faculty', 'Staff', 'Student', 'PhD Scholars'];
+          const departments = data.departments || ['ICT', 'Mathematics', 'Physics', 'Chemistry', 'Business', 'Engineering'];
+          setSystemConfig({ roles, departments });
+          if (roles.length > 0) setRole(roles[0]);
+          if (departments.length > 0) setDepartment(departments[0]);
+        } else {
+          // Fallback if document doesn't exist yet
+          setSystemConfig({
+            roles: ['Faculty', 'Staff', 'Student', 'PhD Scholars'],
+            departments: ['ICT', 'Mathematics', 'Physics', 'Chemistry', 'Business', 'Engineering']
+          });
+        }
+      } catch (err) {
+        console.warn('Could not fetch system config:', err);
+      }
+    };
+    fetchConfig();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,14 +56,27 @@ export function AuthView() {
         await signInWithEmailAndPassword(auth, email, password);
       } else {
         const { user } = await createUserWithEmailAndPassword(auth, email, password);
+        
+        // Map academic role to system permission role
+        let systemRole: 'student' | 'faculty' | 'admin' = 'student';
+        if (role === 'Faculty' || role === 'Staff') {
+          systemRole = 'faculty';
+        }
+
+        // If email contains admin keywords, override for safety
+        if (email.toLowerCase().includes('admin') || email.toLowerCase().includes('webmaster')) {
+          systemRole = 'admin';
+        }
+
         try {
           await setDoc(doc(db, 'users', user.uid), {
             name,
             email,
-            role,
+            role: systemRole,
+            category: role, // Institutional category (Student, Staff, etc)
             department,
-            course: role === 'student' ? course : null,
-            academicYear: role === 'student' ? academicYear : null,
+            course: (role === 'Student' || role === 'PhD Scholars') ? course : null,
+            academicYear: (role === 'Student' || role === 'PhD Scholars') ? academicYear : null,
             createdAt: new Date(),
           });
         } catch (err) {
@@ -102,21 +142,38 @@ export function AuthView() {
                       required
                       value={name}
                       onChange={(e) => setName(e.target.value)}
-                      className="block w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                      className={cn(
+                        "block w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:border-transparent text-sm",
+                        "focus:ring-" + theme.id + "-500",
+                        "focus:border-" + theme.id + "-500"
+                      )}
                       placeholder="John Doe"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-700">Role</label>
+                  <label className="block text-sm font-medium text-slate-700">Institutional Role</label>
                   <select
                     value={role}
-                    onChange={(e) => setRole(e.target.value as any)}
-                    className="mt-1 block w-full pl-3 pr-10 py-2 text-base border border-slate-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-lg"
+                    onChange={(e) => setRole(e.target.value)}
+                    className={cn(
+                      "mt-1 block w-full pl-3 pr-10 py-2 text-base border border-slate-300 focus:outline-none sm:text-sm rounded-lg",
+                      "focus:ring-" + theme.id + "-500",
+                      "focus:border-" + theme.id + "-500"
+                    )}
                   >
-                    <option value="student">Student</option>
-                    <option value="faculty">Faculty Staff</option>
+                    {systemConfig?.roles.map(r => (
+                      <option key={r} value={r}>{r}</option>
+                    ))}
+                    {!systemConfig && (
+                      <>
+                        <option value="Student">Student</option>
+                        <option value="Faculty">Faculty</option>
+                        <option value="Staff">Staff</option>
+                        <option value="PhD Scholars">PhD Scholars</option>
+                      </>
+                    )}
                   </select>
                 </div>
 
@@ -126,18 +183,27 @@ export function AuthView() {
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                       <Building className="h-5 w-5 text-slate-400" />
                     </div>
-                    <input
-                      type="text"
-                      required
+                    <select
                       value={department}
                       onChange={(e) => setDepartment(e.target.value)}
-                      className="block w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                      placeholder="e.g. Computer Science"
-                    />
+                      required
+                      className={cn(
+                        "block w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:border-transparent text-sm",
+                        "focus:ring-" + theme.id + "-500",
+                        "focus:border-" + theme.id + "-500"
+                      )}
+                    >
+                      {systemConfig?.departments.map(d => (
+                        <option key={d} value={d}>{d}</option>
+                      ))}
+                      {!systemConfig && (
+                        <option value="">Select Department</option>
+                      )}
+                    </select>
                   </div>
                 </div>
 
-                {role === 'student' && (
+                {(role === 'Student' || role === 'PhD Scholars') && (
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-slate-700">Course</label>
@@ -150,7 +216,11 @@ export function AuthView() {
                           required
                           value={course}
                           onChange={(e) => setCourse(e.target.value)}
-                          className="block w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                          className={cn(
+                            "block w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:border-transparent text-sm",
+                            "focus:ring-" + theme.id + "-500",
+                            "focus:border-" + theme.id + "-500"
+                          )}
                           placeholder="B.Tech"
                         />
                       </div>
@@ -166,7 +236,11 @@ export function AuthView() {
                           required
                           value={academicYear}
                           onChange={(e) => setAcademicYear(e.target.value)}
-                          className="block w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                          className={cn(
+                            "block w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:border-transparent text-sm",
+                            "focus:ring-" + theme.id + "-500",
+                            "focus:border-" + theme.id + "-500"
+                          )}
                           placeholder="2024"
                         />
                       </div>
@@ -187,7 +261,11 @@ export function AuthView() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="block w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                  className={cn(
+                    "block w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:border-transparent text-sm",
+                    "focus:ring-" + theme.id + "-500",
+                    "focus:border-" + theme.id + "-500"
+                  )}
                   placeholder="name@institute.edu"
                 />
               </div>
@@ -204,7 +282,11 @@ export function AuthView() {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="block w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                  className={cn(
+                    "block w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:border-transparent text-sm",
+                    "focus:ring-" + theme.id + "-500",
+                    "focus:border-" + theme.id + "-500"
+                  )}
                   placeholder="••••••••"
                 />
               </div>
@@ -220,7 +302,11 @@ export function AuthView() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full flex justify-center py-2 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className={cn(
+                  "w-full flex justify-center py-2 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed",
+                  theme.bgClass,
+                  theme.hoverClass
+                )}
               >
                 {loading ? 'Processing...' : isLogin ? 'Sign In' : 'Create Account'}
               </button>
@@ -242,7 +328,12 @@ export function AuthView() {
             <div className="mt-6">
               <button
                 onClick={() => setIsLogin(!isLogin)}
-                className="w-full flex justify-center py-2 px-4 border border-slate-300 rounded-lg shadow-sm text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+                className={cn(
+                  "w-full flex justify-center py-2 px-4 border rounded-lg shadow-sm text-sm font-medium transition-colors",
+                  theme.borderClass,
+                  theme.textClass,
+                  "bg-white hover:bg-slate-50"
+                )}
               >
                 {isLogin ? 'Register New Account' : 'Back to Login'}
               </button>

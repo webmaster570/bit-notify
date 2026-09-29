@@ -4,6 +4,7 @@ import { Bell, Clock, AlertTriangle, Info, Calendar, Megaphone, Trash2, Papercli
 import { cn } from '../lib/utils';
 import { doc, deleteDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { useBranding } from '../context/BrandingContext';
 
 interface NotificationListProps {
   notifications: any[];
@@ -14,6 +15,7 @@ interface NotificationListProps {
 
 export function NotificationList({ notifications, loading, isAdmin, onEdit }: NotificationListProps) {
   const [selectedNotification, setSelectedNotification] = useState<any | null>(null);
+  const { theme } = useBranding();
 
   if (loading) {
     return (
@@ -55,7 +57,7 @@ export function NotificationList({ notifications, loading, isAdmin, onEdit }: No
   const priorityColors = {
     high: 'bg-red-50 text-red-700 border-red-100',
     medium: 'bg-orange-50 text-orange-700 border-orange-100',
-    low: 'bg-blue-50 text-blue-700 border-blue-100',
+    low: cn(theme.lightBgClass, theme.textClass, theme.borderClass),
   };
 
   const categoryIcons = {
@@ -97,7 +99,11 @@ export function NotificationList({ notifications, loading, isAdmin, onEdit }: No
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-2">
-                        <div className="p-1.5 bg-slate-100 rounded text-slate-500 group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors">
+                        <div className={cn(
+                          "p-1.5 bg-slate-100 rounded text-slate-500 transition-colors",
+                          "group-hover:" + theme.lightBgClass,
+                          "group-hover:" + theme.textClass
+                        )}>
                           {categoryIcons[data.category as keyof typeof categoryIcons] || <Bell className="h-4 w-4" />}
                         </div>
                         <span className="text-xs font-bold uppercase tracking-wider text-slate-600 capitalize">
@@ -107,7 +113,7 @@ export function NotificationList({ notifications, loading, isAdmin, onEdit }: No
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        <p className="text-sm font-bold text-slate-900 group-hover:text-blue-700 transition-colors line-clamp-1">
+                        <p className={cn("text-sm font-bold text-slate-900 transition-colors line-clamp-1", "group-hover:" + theme.textClass)}>
                           {data.title || '(Untitled Draft)'}
                         </p>
                         <div className="flex items-center gap-2">
@@ -130,14 +136,14 @@ export function NotificationList({ notifications, loading, isAdmin, onEdit }: No
                         {isAdmin && data.status === 'draft' && (
                           <button
                             onClick={(e) => handleEditClick(e, n.id)}
-                            className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                            className={cn("p-2 rounded-lg transition-all", theme.textClass, "hover:" + theme.lightBgClass)}
                             title="Continue Composing"
                           >
                             <FileEdit className="h-4 w-4" />
                           </button>
                         )}
                         <button
-                          className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                          className={cn("p-2 text-slate-400 rounded-lg transition-all opacity-0 group-hover:opacity-100", "hover:" + theme.textClass, "hover:" + theme.lightBgClass)}
                           title="View Details"
                         >
                           <Eye className="h-4 w-4" />
@@ -168,7 +174,7 @@ export function NotificationList({ notifications, loading, isAdmin, onEdit }: No
             {/* Modal Header */}
             <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
               <div className="flex items-center gap-4">
-                <div className="p-3 bg-white rounded-2xl shadow-sm border border-slate-100 text-blue-600">
+                <div className={cn("p-3 bg-white rounded-2xl shadow-sm border border-slate-100", theme.textClass)}>
                   {categoryIcons[selectedNotification.category as keyof typeof categoryIcons] || <Bell className="h-6 w-6" />}
                 </div>
                 <div>
@@ -212,10 +218,15 @@ export function NotificationList({ notifications, loading, isAdmin, onEdit }: No
                   <a
                     href={selectedNotification.attachment.data}
                     download={selectedNotification.attachment.name}
-                    className="inline-flex items-center gap-3 px-5 py-4 bg-white border border-slate-200 rounded-2xl text-sm font-bold text-slate-700 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200 transition-all shadow-sm group/btn"
+                    className={cn(
+                      "inline-flex items-center gap-3 px-5 py-4 bg-white border border-slate-200 rounded-2xl text-sm font-bold text-slate-700 transition-all shadow-sm group/btn",
+                      "hover:" + theme.lightBgClass,
+                      "hover:" + theme.textClass,
+                      "hover:" + theme.borderClass
+                    )}
                   >
-                    <div className="p-2 bg-slate-100 rounded-xl group-hover/btn:bg-blue-100 transition-colors">
-                      <Paperclip className="h-5 w-5 text-slate-500 group-hover/btn:text-blue-600" />
+                    <div className={cn("p-2 bg-slate-100 rounded-xl transition-colors", "group-hover/btn:" + theme.lightBgClass.replace('bg-', 'bg-').replace('50', '100'))}>
+                      <Paperclip className={cn("h-5 w-5 text-slate-500", "group-hover/btn:" + theme.textClass)} />
                     </div>
                     <div className="flex flex-col items-start">
                       <span>{selectedNotification.attachment.name}</span>
@@ -257,12 +268,12 @@ export function NotificationList({ notifications, loading, isAdmin, onEdit }: No
                           {selectedNotification.deliveryStats?.sentCount || 0}
                         </div>
                       </div>
-                      <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100">
-                        <div className="flex items-center gap-2 text-blue-700 mb-1">
+                      <div className={cn("p-4 rounded-2xl border", theme.lightBgClass, theme.borderClass)}>
+                        <div className={cn("flex items-center gap-2 mb-1", theme.textClass)}>
                           <Eye className="h-4 w-4" />
                           <span className="text-[10px] font-bold uppercase tracking-wider">Read</span>
                         </div>
-                        <div className="text-2xl font-bold text-blue-900">
+                        <div className={cn("text-2xl font-bold", theme.id === 'slate' ? 'text-slate-900' : theme.textClass.replace('text-', 'text-').replace('600', '900'))}>
                           {selectedNotification.deliveryStats?.readCount || 0}
                         </div>
                       </div>

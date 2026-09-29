@@ -6,6 +6,7 @@ import { User, Trash2, Shield, UserPlus, Search, Filter, X, Loader2, Mail, Lock 
 import { cn } from '../lib/utils';
 import { initializeApp } from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword, signOut as authSignOut } from 'firebase/auth';
+import { useBranding } from '../context/BrandingContext';
 
 // Secondary app config for creating users without signing out the current admin
 const firebaseConfig = {
@@ -18,6 +19,7 @@ const firebaseConfig = {
 };
 
 export function UserManagement() {
+  const { theme } = useBranding();
   const [usersQuery] = useState(query(collection(db, 'users'), orderBy('createdAt', 'desc')));
   const [users, loading] = useCollection(usersQuery);
   const [searchTerm, setSearchTerm] = useState('');
@@ -146,12 +148,19 @@ export function UserManagement() {
               placeholder="Search users..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 pr-4 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none w-64 shadow-sm"
+              className={cn(
+                "pl-10 pr-4 py-2 border border-slate-200 rounded-xl text-sm outline-none w-64 shadow-sm focus:ring-2",
+                "focus:ring-" + theme.id + "-500"
+              )}
             />
           </div>
           <button
             onClick={() => setIsAddModalOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 transition-all shadow-sm shadow-blue-100"
+            className={cn(
+              "flex items-center gap-2 px-4 py-2 text-white rounded-xl text-sm font-semibold transition-all shadow-sm",
+              theme.bgClass,
+              theme.hoverClass
+            )}
           >
             <UserPlus className="h-4 w-4" />
             Add User
@@ -161,19 +170,19 @@ export function UserManagement() {
 
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <Filter className="h-4 w-4 text-slate-400" />
             <span className="text-sm font-medium text-slate-600">Filters:</span>
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
               {['all', 'admin', 'push_admin', 'faculty', 'student'].map(role => (
                 <button
                   key={role}
                   onClick={() => setRoleFilter(role)}
                   className={cn(
-                    "px-3 py-1 rounded-full text-xs font-semibold capitalize transition-all",
+                    "px-3 py-1 rounded-full text-xs font-semibold capitalize transition-all border",
                     roleFilter === role 
-                      ? "bg-blue-600 text-white shadow-sm" 
-                      : "bg-white text-slate-600 border border-slate-200 hover:border-blue-300"
+                      ? cn(theme.bgClass, "text-white border-transparent shadow-sm") 
+                      : cn("bg-white text-slate-600 border-slate-200", "hover:" + theme.borderClass.replace('border-', 'border-'))
                   )}
                 >
                   {role === 'push_admin' ? 'Push Admin' : role}
@@ -181,7 +190,7 @@ export function UserManagement() {
               ))}
             </div>
           </div>
-          <span className="text-xs font-medium text-slate-400">{filteredUsers.length} Users Found</span>
+          <span className="text-xs font-medium text-slate-400 shrink-0">{filteredUsers.length} Users Found</span>
         </div>
 
         <div className="overflow-x-auto">
@@ -189,8 +198,8 @@ export function UserManagement() {
             <thead>
               <tr className="bg-slate-50/50 border-b border-slate-200">
                 <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">User Details</th>
-                <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Department</th>
-                <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Role / Permissions</th>
+                <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Institution Category</th>
+                <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">System Permissions</th>
                 <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Actions</th>
               </tr>
             </thead>
@@ -216,7 +225,7 @@ export function UserManagement() {
                     <tr key={uDoc.id} className="hover:bg-slate-50 transition-colors group">
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
-                          <div className="h-10 w-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold shadow-sm">
+                          <div className={cn("h-10 w-10 rounded-full flex items-center justify-center text-white font-bold shadow-sm bg-gradient-to-br", theme.gradientFrom, theme.gradientTo)}>
                             {u.name?.charAt(0)}
                           </div>
                           <div>
@@ -225,19 +234,23 @@ export function UserManagement() {
                           </div>
                         </div>
                       </td>
-                      <td className="px-6 py-4">
-                        <span className="text-sm text-slate-600 font-medium">{u.department || 'General'}</span>
+                      <td className="px-6 py-4 text-center">
+                        <div className="flex flex-col items-start">
+                          <span className="text-xs font-bold text-slate-700">{u.category || 'User'}</span>
+                          <span className="text-[10px] text-slate-400 font-medium uppercase tracking-tighter">{u.department || 'All'}</span>
+                        </div>
                       </td>
                       <td className="px-6 py-4">
                         <select
                           value={u.role}
                           onChange={(e) => handleUpdateRole(uDoc.id, e.target.value)}
                           className={cn(
-                            "text-[10px] font-bold px-2 py-1.5 rounded-lg border focus:outline-none focus:ring-2 focus:ring-blue-500 uppercase tracking-wider transition-all",
+                            "text-[10px] font-bold px-2 py-1.5 rounded-lg border focus:outline-none uppercase tracking-wider transition-all focus:ring-2",
+                            "focus:ring-" + theme.id + "-500",
                             u.role === 'admin' ? "bg-purple-50 text-purple-700 border-purple-200" :
-                            u.role === 'push_admin' ? "bg-amber-50 text-amber-800 border-amber-300 font-bold" :
+                            u.role === 'push_admin' ? "bg-amber-50 text-amber-800 border-amber-300" :
                             u.role === 'faculty' ? "bg-emerald-50 text-emerald-700 border-emerald-200" :
-                            "bg-blue-50 text-blue-700 border-blue-200"
+                            cn(theme.lightBgClass, theme.textClass, theme.borderClass)
                           )}
                         >
                           <option value="student">Student</option>
@@ -250,7 +263,7 @@ export function UserManagement() {
                         <div className="flex items-center justify-end gap-2">
                           <button
                             onClick={() => handleEditClick(uDoc)}
-                            className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                            className={cn("p-2 text-slate-400 rounded-lg transition-all opacity-0 group-hover:opacity-100", "hover:" + theme.textClass, "hover:" + theme.lightBgClass)}
                             title="Edit Profile"
                           >
                             <Shield className="h-4 w-4" />
@@ -307,7 +320,10 @@ export function UserManagement() {
                   required
                   value={editingUser.name}
                   onChange={(e) => setEditingUser({ ...editingUser, name: e.target.value })}
-                  className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none shadow-sm"
+                  className={cn(
+                    "w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 outline-none shadow-sm",
+                    "focus:ring-" + theme.id + "-500"
+                  )}
                 />
               </div>
 
@@ -318,7 +334,10 @@ export function UserManagement() {
                   required
                   value={editingUser.department}
                   onChange={(e) => setEditingUser({ ...editingUser, department: e.target.value })}
-                  className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none shadow-sm"
+                  className={cn(
+                    "w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 outline-none shadow-sm",
+                    "focus:ring-" + theme.id + "-500"
+                  )}
                 />
               </div>
 
@@ -327,7 +346,10 @@ export function UserManagement() {
                 <select
                   value={editingUser.role}
                   onChange={(e) => setEditingUser({ ...editingUser, role: e.target.value as any })}
-                  className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none shadow-sm font-medium"
+                  className={cn(
+                    "w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 outline-none shadow-sm font-medium",
+                    "focus:ring-" + theme.id + "-500"
+                  )}
                 >
                   <option value="student">Student (Recipient)</option>
                   <option value="faculty">Faculty (Staff)</option>
@@ -345,7 +367,11 @@ export function UserManagement() {
               <button
                 type="submit"
                 disabled={isCreating}
-                className="w-full py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-200 flex items-center justify-center gap-2 disabled:opacity-50"
+                className={cn(
+                  "w-full py-3 text-white font-bold rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 disabled:opacity-50",
+                  theme.bgClass,
+                  theme.hoverClass
+                )}
               >
                 {isCreating ? <Loader2 className="h-5 w-5 animate-spin" /> : 'Save Changes'}
               </button>
@@ -381,7 +407,10 @@ export function UserManagement() {
                     required
                     value={newUserName}
                     onChange={(e) => setNewUserName(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all shadow-sm"
+                    className={cn(
+                      "w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 outline-none transition-all shadow-sm",
+                      "focus:ring-" + theme.id + "-500"
+                    )}
                     placeholder="e.g. Alice Smith"
                   />
                 </div>
@@ -397,7 +426,10 @@ export function UserManagement() {
                       required
                       value={newUserEmail}
                       onChange={(e) => setNewUserEmail(e.target.value)}
-                      className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all shadow-sm"
+                      className={cn(
+                        "w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 outline-none transition-all shadow-sm",
+                        "focus:ring-" + theme.id + "-500"
+                      )}
                       placeholder="alice@inst.edu"
                     />
                   </div>
@@ -412,7 +444,10 @@ export function UserManagement() {
                       minLength={6}
                       value={newUserPassword}
                       onChange={(e) => setNewUserPassword(e.target.value)}
-                      className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all shadow-sm"
+                      className={cn(
+                        "w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 outline-none transition-all shadow-sm",
+                        "focus:ring-" + theme.id + "-500"
+                      )}
                       placeholder="••••••"
                     />
                   </div>
@@ -425,7 +460,10 @@ export function UserManagement() {
                   <select
                     value={newUserRole}
                     onChange={(e) => setNewUserRole(e.target.value as any)}
-                    className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none shadow-sm font-medium"
+                    className={cn(
+                      "w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 outline-none shadow-sm font-medium",
+                      "focus:ring-" + theme.id + "-500"
+                    )}
                   >
                     <option value="student">Student (Recipient)</option>
                     <option value="faculty">Faculty (Staff)</option>
@@ -440,7 +478,10 @@ export function UserManagement() {
                     required
                     value={newUserDept}
                     onChange={(e) => setNewUserDept(e.target.value)}
-                    className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none shadow-sm"
+                    className={cn(
+                      "w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 outline-none shadow-sm",
+                      "focus:ring-" + theme.id + "-500"
+                    )}
                     placeholder="e.g. Physics"
                   />
                 </div>
@@ -455,7 +496,11 @@ export function UserManagement() {
               <button
                 type="submit"
                 disabled={isCreating}
-                className="w-full py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-200 flex items-center justify-center gap-2 disabled:opacity-50"
+                className={cn(
+                  "w-full py-3 text-white font-bold rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 disabled:opacity-50",
+                  theme.bgClass,
+                  theme.hoverClass
+                )}
               >
                 {isCreating ? (
                   <>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useBranding, THEME_COLORS, ThemeColorKey, PresetIconKey } from '../context/BrandingContext';
 import { 
   GraduationCap, 
@@ -20,10 +20,11 @@ import {
   Trash2,
   RefreshCw,
   Wrench,
-  Database
+  Database,
+  X
 } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { collection, getDocs, writeBatch, doc } from 'firebase/firestore';
+import { collection, getDocs, writeBatch, doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 
 export function BrandingSettings() {
@@ -41,6 +42,64 @@ export function BrandingSettings() {
   const [clearingCache, setClearingCache] = useState(false);
   const [cleaningDb, setCleaningDb] = useState(false);
   const [cacheClearMessage, setCacheClearMessage] = useState<string | null>(null);
+
+  const [systemConfig, setSystemConfig] = useState<{ roles: string[], departments: string[] }>({ roles: [], departments: [] });
+  const [newRole, setNewRole] = useState('');
+  const [newDept, setNewDept] = useState('');
+
+  useEffect(() => {
+    const fetchConfig = async () => {
+      const snap = await getDoc(doc(db, 'system', 'config'));
+      if (snap.exists()) {
+        const data = snap.data();
+        setSystemConfig({
+          roles: data.roles || [],
+          departments: data.departments || []
+        });
+      }
+    };
+    fetchConfig();
+  }, []);
+
+  const saveSystemConfig = async (newConfig: { roles: string[], departments: string[] }) => {
+    try {
+      await setDoc(doc(db, 'system', 'config'), {
+        ...newConfig,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+      setSystemConfig(newConfig);
+      setCacheClearMessage('System configuration updated successfully.');
+      setTimeout(() => setCacheClearMessage(null), 3000);
+    } catch (err: any) {
+      alert('Failed to update config: ' + err.message);
+    }
+  };
+
+  const addRole = () => {
+    if (newRole && !systemConfig.roles.includes(newRole)) {
+      const roles = [...systemConfig.roles, newRole];
+      saveSystemConfig({ ...systemConfig, roles });
+      setNewRole('');
+    }
+  };
+
+  const removeRole = (role: string) => {
+    const roles = systemConfig.roles.filter(r => r !== role);
+    saveSystemConfig({ ...systemConfig, roles });
+  };
+
+  const addDept = () => {
+    if (newDept && !systemConfig.departments.includes(newDept)) {
+      const departments = [...systemConfig.departments, newDept];
+      saveSystemConfig({ ...systemConfig, departments });
+      setNewDept('');
+    }
+  };
+
+  const removeDept = (dept: string) => {
+    const departments = systemConfig.departments.filter(d => d !== dept);
+    saveSystemConfig({ ...systemConfig, departments });
+  };
 
   const handleCleanupTokens = async () => {
     if (!confirm('This will purge all registered device tokens from the database. Users will need to re-enable notifications on their next login to receive alerts. Continue?')) {
@@ -541,7 +600,97 @@ export function BrandingSettings() {
             </p>
           </div>
 
-          {/* Card 5: System Maintenance */}
+          {/* Card 5: Institutional Taxonomy */}
+          <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-6">
+            <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
+              <Landmark className={cn("h-4 w-4", theme.textClass)} />
+              <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Institutional Taxonomy</h3>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              {/* Manage Roles */}
+              <div className="space-y-4">
+                <div className="space-y-1">
+                  <h4 className="text-sm font-bold text-slate-900">Registration Roles</h4>
+                  <p className="text-xs text-slate-500">Categories available for selection during user sign-up.</p>
+                </div>
+                
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newRole}
+                    onChange={(e) => setNewRole(e.target.value)}
+                    placeholder="New role name..."
+                    className="flex-1 px-3 py-2 border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={addRole}
+                    className={cn("px-3 py-2 text-white rounded-xl text-xs font-bold transition-all", theme.bgClass, theme.hoverClass)}
+                  >
+                    Add
+                  </button>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  {systemConfig.roles.map(role => (
+                    <span key={role} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 text-slate-700 rounded-full text-[10px] font-bold border border-slate-200 group">
+                      {role}
+                      <button 
+                        type="button"
+                        onClick={() => removeRole(role)}
+                        className="text-slate-400 hover:text-red-500 transition-colors"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {/* Manage Departments */}
+              <div className="space-y-4">
+                <div className="space-y-1">
+                  <h4 className="text-sm font-bold text-slate-900">Departments</h4>
+                  <p className="text-xs text-slate-500">Official campus departments for targeting broadcasts.</p>
+                </div>
+                
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newDept}
+                    onChange={(e) => setNewDept(e.target.value)}
+                    placeholder="New department..."
+                    className="flex-1 px-3 py-2 border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={addDept}
+                    className={cn("px-3 py-2 text-white rounded-xl text-xs font-bold transition-all", theme.bgClass, theme.hoverClass)}
+                  >
+                    Add
+                  </button>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  {systemConfig.departments.map(dept => (
+                    <span key={dept} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 text-slate-700 rounded-full text-[10px] font-bold border border-slate-200 group">
+                      {dept}
+                      <button 
+                        type="button"
+                        onClick={() => removeDept(dept)}
+                        className="text-slate-400 hover:text-red-500 transition-colors"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Card 6: System Maintenance */}
           <div className="bg-white rounded-2xl border border-red-200/80 p-6 shadow-xs space-y-4">
             <div className="flex items-center gap-2 pb-3 border-b border-red-100">
               <Wrench className="h-4 w-4 text-red-600" />
